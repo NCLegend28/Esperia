@@ -8,13 +8,13 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from esperia.evidence import Source
+from esperia.execution import Provider, StageRunner
+from esperia.followups import build_followups, save_followups
 from esperia.ledger import Ledger
-from esperia.provider import Completion, ProviderFailure, cost_cents, reservation_cents
 
 CHECKS = [
     "identity",
@@ -93,17 +93,6 @@ class Review(StrictModel):
     corrections: list[str]
 
 
-class Provider(Protocol):
-    """Minimal boundary allowing provider replacement without changing workflow."""
-
-    def complete(
-        self, model: str, instructions: str, prompt: str, maximum: int
-    ) -> Completion: ...
-
-
-T = TypeVar("T", bound=BaseModel)
-
-
 def run_research(
     ledger: Ledger,
     provider: Provider,
@@ -112,6 +101,7 @@ def run_research(
     sources: list[Source],
     output: Path,
     progress: Callable[[str], None] = print,
+    reviewer: Provider | None = None,
 ) -> Path:
     """Run up to two revisions, preserving calls and unresolved charges on failure.
 
@@ -125,75 +115,9 @@ def run_research(
     output.mkdir(parents=True, exist_ok=True)
     ledger.start(job_id)
 
-    def invoke(
-        stage: str, model: str, prompt: str, schema: type[T], maximum: int = 3500
-    ) -> T:
-        full_prompt = json.dumps(
-            {"task": prompt, "output_schema": schema.model_json_schema()}
-        )
-        subscription = getattr(provider, "billing_mode", "api") == "subscription"
-        if subscription:
-            call_id = ledger.reserve_subscription_call(job_id, stage, model)
-            progress(f"{stage}: {model}; ChatGPT subscription")
-        else:
-            bound = reservation_cents(model, SYSTEM, full_prompt, maximum)
-            call_id = ledger.reserve_call(job_id, stage, model, bound)
-            progress(f"{stage}: {model}; reserved up to {bound} cents")
-        try:
-            response = provider.complete(model, SYSTEM, full_prompt, maximum)
-        except ProviderFailure as error:
-            if error.rejected:
-                ledger.settle_call(call_id, 0, f"rejected:{error.code}")
-            else:
-                ledger.uncertain_call(call_id)
-            (output / f"{stage}-error.json").write_text(
-                json.dumps(
-                    {
-                        "stage": stage,
-                        "status": error.status,
-                        "code": error.code,
-                        "billing": (
-                            "rejected before generation"
-                            if error.rejected
-                            else "uncertain"
-                        ),
-                    },
-                    indent=2,
-                )
-            )
-            raise
-        except Exception:
-            ledger.uncertain_call(call_id)
-            raise RuntimeError(
-                "Provider call failed; billing is uncertain. No automatic retry."
-            ) from None
-        ledger.settle_call(
-            call_id,
-            (
-                0
-                if subscription
-                else cost_cents(model, response.input_tokens, response.output_tokens)
-            ),
-            response.response_id,
-        )
-        # Save observed output before parsing so a paid response is never lost on validation failure.
-        (output / f"{stage}.json").write_text(
-            json.dumps(
-                {
-                    "model": model,
-                    "billing_mode": "subscription" if subscription else "api",
-                    "response_id": response.response_id,
-                    "input_tokens": response.input_tokens,
-                    "output_tokens": response.output_tokens,
-                    "complete": response.complete,
-                    "text": response.text,
-                },
-                indent=2,
-            )
-        )
-        if not response.complete:
-            raise ValueError("Model response incomplete; retained for inspection")
-        return schema.model_validate_json(response.text)
+    invoke = StageRunner(
+        ledger, provider, job_id, output, SYSTEM, progress, reviewer=reviewer
+    ).invoke
 
     try:
         plan = invoke(
@@ -331,16 +255,14 @@ def run_research(
                 for c in review.checks
             ]
         )
-        lines.extend(
-            [
-                "",
-                "## Missing evidence",
-                "",
-                *[f"- {item}" for item in draft.missing_evidence],
-            ]
+        tasks = build_followups(
+            draft.missing_evidence,
+            [(c.name, c.passed, c.explanation) for c in review.checks],
+            review.corrections,
         )
+        lines.extend(["", *save_followups(output, tasks)])
         report.write_text("\n".join(lines))
-        ledger.complete_research(job_id, passed)
+        ledger.complete_research(job_id, passed, report)
         return report
     except Exception:
         ledger.block_research(job_id)

@@ -24,6 +24,7 @@ ALLOWED_HOSTS = frozenset(
         "ir.arqit.uk",
         "www.sealsq.com",
         "www.sec.gov",
+        "d1io3yog0oux5.cloudfront.net",
     }
 )
 MAX_BYTES = 2_000_000
@@ -39,6 +40,10 @@ class Source(BaseModel):
     text: str = Field(max_length=12000)
     content_type: str = "text/html"
     truncated: bool
+    extraction_version: int = 1
+    passages: list[tuple[int, int]] = Field(default_factory=list)
+    extracted_sha256: str | None = None
+    discovered_from: str | None = None
 
 
 class TextExtractor(HTMLParser):
@@ -170,7 +175,7 @@ def load_archive(path: Path) -> list[Source]:
     sources = TypeAdapter(list[Source]).validate_json(
         (path / "sources.json").read_text()
     )
-    if not 1 <= len(sources) <= 12 or len({s.id for s in sources}) != len(sources):
+    if not 1 <= len(sources) <= 24 or len({s.id for s in sources}) != len(sources):
         raise ValueError("Invalid archive source identities")
     for source in sources:
         validate_url(source.url)
@@ -183,6 +188,32 @@ def load_archive(path: Path) -> list[Source]:
         raw = (path / f"{source.sha256}.source").read_bytes()
         if sha256(raw).hexdigest() != source.sha256:
             raise ValueError("Archive content hash mismatch")
+        if source.extraction_version == 2:
+            from esperia.discovery import extract_document, projected_text
+
+            text = extract_document(
+                raw, source.content_type, path / f"{source.sha256}.source"
+            )
+            if sha256(text.encode()).hexdigest() != source.extracted_sha256:
+                raise ValueError("Extracted document hash mismatch")
+            if (
+                not source.passages
+                or any(not 0 <= a < b <= len(text) for a, b in source.passages)
+                or source.passages != sorted(source.passages)
+                or any(
+                    a[1] > b[0] for a, b in zip(source.passages, source.passages[1:])
+                )
+            ):
+                raise ValueError("Invalid source passage offsets")
+            if projected_text(
+                text, source.passages
+            ) != source.text or source.truncated != (
+                len(text) > sum(b - a for a, b in source.passages)
+            ):
+                raise ValueError("Archive selected passages were modified")
+            continue
+        if source.extraction_version != 1:
+            raise ValueError("Unknown extraction version")
         decoded = raw.decode("utf-8", errors="replace")
         parser = TextExtractor()
         parser.feed(decoded)

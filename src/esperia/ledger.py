@@ -4,10 +4,12 @@ Example: Ledger(Path("jobs.sqlite"), 6500).create("Quantum research", 500)
 Amounts are integer US cents. This module performs no external actions.
 """
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -34,6 +36,194 @@ class Ledger:
                 actual INTEGER NOT NULL DEFAULT 0 CHECK(actual >= 0),
                 requires_approval INTEGER NOT NULL CHECK(requires_approval IN (0,1))
             )""")
+
+    def _ensure_owner_reviews(self, connection: sqlite3.Connection) -> None:
+        """Add review records to existing databases without altering historical jobs."""
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS report_versions (job_id TEXT PRIMARY KEY, path TEXT NOT NULL, sha256 TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS owner_decisions (job_id TEXT PRIMARY KEY, report_sha256 TEXT NOT NULL, decision TEXT NOT NULL, reason TEXT NOT NULL, actor TEXT NOT NULL, decided_at TEXT NOT NULL)"
+        )
+
+    def review_record(self, job_id: str) -> dict[str, Any]:
+        """Return persisted job, registered report and optional owner decision."""
+        with self._transaction() as connection:
+            self._ensure_owner_reviews(connection)
+            job = connection.execute(
+                "SELECT * FROM jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if job is None:
+                raise PolicyError("Job not found")
+            report = connection.execute(
+                "SELECT * FROM report_versions WHERE job_id=?", (job_id,)
+            ).fetchone()
+            decision = connection.execute(
+                "SELECT * FROM owner_decisions WHERE job_id=?", (job_id,)
+            ).fetchone()
+            return {
+                "job": dict(job),
+                "report": dict(report) if report else None,
+                "decision": dict(decision) if decision else None,
+            }
+
+    def decide_report(
+        self, job_id: str, digest: str, decision: str, reason: str = ""
+    ) -> None:
+        """Record a one-time local-owner decision bound to an unchanged reviewed report.
+
+        Example: ledger.decide_report(job, inspected_sha256, "accepted")
+        This trusted console method is not an authorization boundary for agents or HTTP.
+        """
+        if decision not in {"accepted", "rejected"} or len(reason) > 2000:
+            raise PolicyError("Invalid owner decision or reason")
+        if decision == "rejected" and not reason.strip():
+            raise PolicyError("Rejection requires a reason")
+        with self._transaction() as connection:
+            self._ensure_owner_reviews(connection)
+            self._ensure_calls(connection)
+            row = connection.execute(
+                "SELECT j.state, r.path, r.sha256 FROM jobs j JOIN report_versions r ON j.id=r.job_id WHERE j.id=?",
+                (job_id,),
+            ).fetchone()
+            if row is None or row["state"] != "awaiting_owner":
+                raise PolicyError(
+                    "Only a registered report awaiting owner review can be accepted or rejected; blocked jobs cannot bypass checks"
+                )
+            if digest != row["sha256"]:
+                raise PolicyError(
+                    "Report version does not match; inspect the job again"
+                )
+            try:
+                actual = sha256(Path(row["path"]).read_bytes()).hexdigest()
+            except OSError:
+                raise PolicyError("Registered report is unavailable") from None
+            if actual != digest:
+                raise PolicyError(
+                    "Report changed after independent review; a fresh review is required"
+                )
+            pending = connection.execute(
+                "SELECT COUNT(*) FROM calls WHERE job_id=? AND state != 'settled'",
+                (job_id,),
+            ).fetchone()[0]
+            if pending:
+                raise PolicyError(
+                    "Uncertain calls must be reconciled before an owner decision"
+                )
+            connection.execute(
+                "INSERT INTO owner_decisions VALUES (?,?,?,?,?,?)",
+                (
+                    job_id,
+                    digest,
+                    decision,
+                    reason.strip(),
+                    "local_owner",
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            connection.execute("UPDATE jobs SET state=? WHERE id=?", (decision, job_id))
+
+    def _ensure_repairs(self, connection: sqlite3.Connection) -> None:
+        """Create durable child-job and assignment tables for existing databases."""
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS repair_jobs (job_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL, request_key TEXT NOT NULL, UNIQUE(parent_id,request_key))"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS repair_tasks (job_id TEXT NOT NULL, task_id TEXT NOT NULL, payload TEXT NOT NULL, state TEXT NOT NULL, outcome TEXT NOT NULL, PRIMARY KEY(job_id,task_id))"
+        )
+
+    def create_repair(
+        self,
+        parent_id: str,
+        request_key: str,
+        tasks: list[dict[str, str]],
+        call_limit: int,
+    ) -> str:
+        """Atomically assign one bounded repair child; duplicate dispatch is refused."""
+        if not tasks or len(tasks) > 64 or not 2 <= call_limit <= 3:
+            raise PolicyError("Repair requires 1–64 tasks and a call limit of 2–3")
+        with self._transaction() as connection:
+            self._ensure_repairs(connection)
+            self._ensure_calls(connection)
+            parent = connection.execute(
+                "SELECT * FROM jobs WHERE id=?", (parent_id,)
+            ).fetchone()
+            if parent is None or parent["state"] not in {"blocked", "rejected"}:
+                raise PolicyError("Only blocked or owner-rejected jobs can be repaired")
+            if connection.execute(
+                "SELECT 1 FROM calls WHERE job_id=? AND state != 'settled'",
+                (parent_id,),
+            ).fetchone():
+                raise PolicyError(
+                    "Reconcile uncertain parent calls before dispatching repairs"
+                )
+            previous = connection.execute(
+                "SELECT job_id FROM repair_jobs WHERE parent_id=? AND request_key=?",
+                (parent_id, request_key),
+            ).fetchone()
+            if previous:
+                raise PolicyError(
+                    f"This repair was already dispatched: {previous['job_id']}. Inspect it; no automatic replay."
+                )
+            job = str(uuid4())
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS subscription_jobs (job_id TEXT PRIMARY KEY, call_limit INTEGER NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO jobs (id,title,period,state,reserved,requires_approval) VALUES (?,?,?,'queued',0,0)",
+                (
+                    job,
+                    ("Repair: " + parent["title"])[:240],
+                    datetime.now(UTC).strftime("%Y-%m"),
+                ),
+            )
+            connection.execute(
+                "INSERT INTO subscription_jobs VALUES (?,?)", (job, call_limit)
+            )
+            connection.execute(
+                "INSERT INTO repair_jobs VALUES (?,?,?)", (job, parent_id, request_key)
+            )
+            connection.executemany(
+                "INSERT INTO repair_tasks VALUES (?,?,?,'assigned','')",
+                [(job, t["id"], json.dumps(t)) for t in tasks],
+            )
+            return job
+
+    def repair_record(self, job_id: str) -> dict[str, Any]:
+        """Inspect parent/children and assignment states without model execution."""
+        with self._transaction() as connection:
+            self._ensure_repairs(connection)
+            parent = connection.execute(
+                "SELECT parent_id FROM repair_jobs WHERE job_id=?", (job_id,)
+            ).fetchone()
+            children = connection.execute(
+                "SELECT job_id FROM repair_jobs WHERE parent_id=? ORDER BY rowid",
+                (job_id,),
+            ).fetchall()
+            tasks = connection.execute(
+                "SELECT * FROM repair_tasks WHERE job_id=? ORDER BY rowid", (job_id,)
+            ).fetchall()
+            return {
+                "parent_id": parent[0] if parent else None,
+                "children": [row[0] for row in children],
+                "tasks": [
+                    {
+                        **json.loads(row["payload"]),
+                        "state": row["state"],
+                        "outcome": row["outcome"],
+                    }
+                    for row in tasks
+                ],
+            }
+
+    def fail_repair_tasks(self, job_id: str) -> None:
+        """Retain assignments as blocked when collection or generation fails."""
+        with self._transaction() as connection:
+            self._ensure_repairs(connection)
+            connection.execute(
+                "UPDATE repair_tasks SET state='blocked',outcome='Repair workflow stopped; inspect child job diagnostics' WHERE job_id=? AND state='assigned'",
+                (job_id,),
+            )
 
     def create_subscription(self, title: str, call_limit: int = 16) -> str:
         """Create a quota-limited job without reserving any API dollars."""
@@ -148,7 +338,13 @@ class Ledger:
                 (cents, cents, call["job_id"]),
             )
 
-    def complete_research(self, job_id: str, passed: bool) -> None:
+    def complete_research(
+        self,
+        job_id: str,
+        passed: bool,
+        report_path: Path | None = None,
+        repair_checks: list[dict[str, Any]] | None = None,
+    ) -> None:
         """Release unused funds while keeping reviewer approval distinct from owner acceptance."""
         with self._transaction() as connection:
             self._ensure_calls(connection)
@@ -158,12 +354,47 @@ class Ledger:
             ).fetchone()[0]
             if pending:
                 raise PolicyError("Uncertain calls must be reconciled first")
+            self._ensure_repairs(connection)
+            task_ids = [
+                row[0]
+                for row in connection.execute(
+                    "SELECT task_id FROM repair_tasks WHERE job_id=?", (job_id,)
+                )
+            ]
+            if task_ids:
+                if repair_checks is None or sorted(task_ids) != sorted(
+                    c["id"] for c in repair_checks
+                ):
+                    raise PolicyError(
+                        "Repair results must evaluate each assigned task exactly once"
+                    )
+                if passed and not all(c["passed"] is True for c in repair_checks):
+                    raise PolicyError("Unresolved repair tasks prevent acceptance")
+                connection.executemany(
+                    "UPDATE repair_tasks SET state=?,outcome=? WHERE job_id=? AND task_id=?",
+                    [
+                        (
+                            "review_passed" if c["passed"] else "blocked",
+                            c["explanation"],
+                            job_id,
+                            c["id"],
+                        )
+                        for c in repair_checks
+                    ],
+                )
             changed = connection.execute(
                 "UPDATE jobs SET state = ?, reserved = 0 WHERE id = ? AND state = 'running'",
                 ("awaiting_owner" if passed else "blocked", job_id),
             ).rowcount
             if changed != 1:
                 raise PolicyError("Research job is not running")
+            if report_path is not None:
+                self._ensure_owner_reviews(connection)
+                content_digest = sha256(report_path.read_bytes()).hexdigest()
+                connection.execute(
+                    "INSERT INTO report_versions VALUES (?,?,?)",
+                    (job_id, str(report_path.resolve()), content_digest),
+                )
 
     def block_research(self, job_id: str) -> None:
         """Release unused funds but preserve every uncertain call reservation."""
