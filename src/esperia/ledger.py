@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from esperia.settings import Settings
+
 
 class PolicyError(ValueError):
     """A requested transition would violate a budget or approval rule."""
@@ -22,7 +24,17 @@ class PolicyError(ValueError):
 class Ledger:
     """Store jobs in an explicitly supplied SQLite database and budget scope."""
 
-    def __init__(self, path: Path, monthly_limit_cents: int, max_job_cents: int = 500):
+    def __init__(
+        self,
+        path: Path,
+        monthly_limit_cents: int,
+        max_job_cents: int | None = None,
+        settings: Settings | None = None,
+    ):
+        self.settings = settings or Settings()
+        max_job_cents = (
+            self.settings.job_cents if max_job_cents is None else max_job_cents
+        )
         if monthly_limit_cents < 0 or max_job_cents <= 0:
             raise ValueError("Invalid spending limits")
         self.path = path
@@ -75,7 +87,10 @@ class Ledger:
         Example: ledger.decide_report(job, inspected_sha256, "accepted")
         This trusted console method is not an authorization boundary for agents or HTTP.
         """
-        if decision not in {"accepted", "rejected"} or len(reason) > 2000:
+        if (
+            decision not in {"accepted", "rejected"}
+            or len(reason) > self.settings.reason_chars
+        ):
             raise PolicyError("Invalid owner decision or reason")
         if decision == "rejected" and not reason.strip():
             raise PolicyError("Rejection requires a reason")
@@ -140,8 +155,14 @@ class Ledger:
         call_limit: int,
     ) -> str:
         """Atomically assign one bounded repair child; duplicate dispatch is refused."""
-        if not tasks or len(tasks) > 64 or not 2 <= call_limit <= 3:
-            raise PolicyError("Repair requires 1–64 tasks and a call limit of 2–3")
+        if (
+            not tasks
+            or len(tasks) > self.settings.repair_tasks
+            or not 2 <= call_limit <= self.settings.max_calls
+        ):
+            raise PolicyError(
+                f"Repair requires 1–{self.settings.repair_tasks} tasks and a call limit of 2–{self.settings.max_calls}"
+            )
         with self._transaction() as connection:
             self._ensure_repairs(connection)
             self._ensure_calls(connection)
@@ -173,7 +194,7 @@ class Ledger:
                 "INSERT INTO jobs (id,title,period,state,reserved,requires_approval) VALUES (?,?,?,'queued',0,0)",
                 (
                     job,
-                    ("Repair: " + parent["title"])[:240],
+                    ("Repair: " + parent["title"])[: self.settings.title_chars],
                     datetime.now(UTC).strftime("%Y-%m"),
                 ),
             )
@@ -225,9 +246,18 @@ class Ledger:
                 (job_id,),
             )
 
-    def create_subscription(self, title: str, call_limit: int = 16) -> str:
+    def create_subscription(self, title: str, call_limit: int | None = None) -> str:
         """Create a quota-limited job without reserving any API dollars."""
-        if not title.strip() or len(title) > 240 or not 1 <= call_limit <= 32:
+        call_limit = (
+            self.settings.call_budget(self.settings.mode)
+            if call_limit is None
+            else call_limit
+        )
+        if (
+            not title.strip()
+            or len(title) > self.settings.title_chars
+            or not 1 <= call_limit <= self.settings.max_calls
+        ):
             raise ValueError("Invalid subscription job title or call limit")
         with self._transaction() as connection:
             connection.execute(
@@ -242,6 +272,23 @@ class Ledger:
                 "INSERT INTO subscription_jobs VALUES (?,?)", (job_id, call_limit)
             )
         return job_id
+
+    def remaining_subscription_calls(self, job_id: str) -> int | None:
+        """Return remaining quota, or None for a monetary-budget job.
+
+        Example: ledger.remaining_subscription_calls(job_id)
+        Reservations still enforce the authoritative cap atomically at dispatch.
+        """
+        with self._transaction() as connection:
+            self._ensure_calls(connection)
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS subscription_jobs (job_id TEXT PRIMARY KEY, call_limit INTEGER NOT NULL)"
+            )
+            row = connection.execute(
+                "SELECT call_limit - (SELECT COUNT(*) FROM calls WHERE job_id=?) FROM subscription_jobs WHERE job_id=?",
+                (job_id, job_id),
+            ).fetchone()
+            return int(row[0]) if row else None
 
     def reserve_subscription_call(self, job_id: str, stage: str, model: str) -> str:
         """Enforce a durable per-job call cap with zero monetary reservation."""
@@ -422,7 +469,9 @@ class Ledger:
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
+        connection = sqlite3.connect(
+            self.path, timeout=self.settings.sqlite_timeout, isolation_level=None
+        )
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -439,7 +488,7 @@ class Ledger:
     ) -> str:
         """Reserve a job budget atomically; concurrent jobs share the same cap."""
         title = title.strip()
-        if not title or len(title) > 240:
+        if not title or len(title) > self.settings.title_chars:
             raise ValueError("Title must contain 1–240 characters")
         if not 0 < reserve_cents <= self.max_job:
             raise PolicyError(

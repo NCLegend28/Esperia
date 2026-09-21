@@ -1,0 +1,7 @@
+{
+  "name": "investment",
+  "version": "1",
+  "checks": ["scope", "identity", "citations", "financial_periods", "valuation", "counterarguments", "uncertainty", "portfolio_limits"],
+  "instructions": "Address the actual companies, sector and time horizon requested. Compare business models, commercial evidence, financial durability, valuation inputs and downside scenarios. Distinguish reported facts from forecasts. Do not invent market prices or portfolio inputs. Explain missing evidence and avoid personalized sizing or purchase recommendations without supporting data.",
+  "discovery_terms": ["annual", "quarterly", "10-k", "10-q", "20-f", "6-k", "earnings", "financial", "cash flow", "liquidity", "revenue", "risk factors"]
+}

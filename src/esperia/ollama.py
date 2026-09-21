@@ -10,6 +10,7 @@ import httpx
 
 from esperia.llama import loopback_url
 from esperia.provider import Completion
+from esperia.settings import Settings
 from esperia.subscription import ConfigurationError
 
 
@@ -20,11 +21,21 @@ class OllamaProvider:
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:11434",
-        model: str = "qwen2.5:7b",
-        context: int = 32768,
-        timeout_seconds: int = 900,
+        base_url: str | None = None,
+        model: str | None = None,
+        context: int | None = None,
+        timeout_seconds: int | None = None,
+        settings: Settings | None = None,
     ):
+        self.settings = settings or Settings()
+        base_url = base_url if base_url is not None else self.settings.ollama_url
+        model = model if model is not None else self.settings.ollama_model
+        context = context if context is not None else self.settings.ollama_context
+        timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else self.settings.ollama_timeout
+        )
         self.base_url = loopback_url(base_url)
         if not model or "cloud" in model.lower() or context < 2048:
             raise ConfigurationError(
@@ -40,7 +51,12 @@ class OllamaProvider:
         self.cache_identity = ""
         self.client = httpx.Client(
             base_url=self.base_url,
-            timeout=httpx.Timeout(timeout_seconds, connect=10, write=30, pool=10),
+            timeout=httpx.Timeout(
+                timeout_seconds,
+                connect=self.settings.connect_timeout,
+                write=self.settings.write_timeout,
+                pool=self.settings.pool_timeout,
+            ),
             follow_redirects=False,
             trust_env=False,
         )
@@ -48,7 +64,9 @@ class OllamaProvider:
     def check_login(self) -> None:
         """Verify installed weights, completion support, context capacity, and model digest."""
         try:
-            response = self.client.get("/api/tags", timeout=10)
+            response = self.client.get(
+                "/api/tags", timeout=self.settings.metadata_timeout
+            )
             response.raise_for_status()
             selected = next(
                 (m for m in response.json()["models"] if m["name"] == self.model_name),
@@ -59,7 +77,9 @@ class OllamaProvider:
                     "ESPERIA_OLLAMA_MODEL is not installed; no download was attempted"
                 )
             response = self.client.post(
-                "/api/show", json={"model": self.model_name}, timeout=10
+                "/api/show",
+                json={"model": self.model_name},
+                timeout=self.settings.metadata_timeout,
             )
             response.raise_for_status()
             info = response.json()
@@ -87,7 +107,12 @@ class OllamaProvider:
                     "ESPERIA_OLLAMA_CONTEXT exceeds the model's verified context capacity"
                 )
             self.cache_identity = json.dumps(
-                [self.base_url, selected["digest"], self.context]
+                [
+                    self.base_url,
+                    selected["digest"],
+                    self.context,
+                    self.settings.ollama_temperature,
+                ]
             )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
             if isinstance(error, ConfigurationError):
@@ -114,7 +139,7 @@ class OllamaProvider:
                     "format": json.loads(prompt)["output_schema"],
                     "stream": False,
                     "options": {
-                        "temperature": 0,
+                        "temperature": self.settings.ollama_temperature,
                         "num_predict": maximum,
                         "num_ctx": self.context,
                     },

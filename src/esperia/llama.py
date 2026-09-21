@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from esperia.provider import Completion
+from esperia.settings import Settings
 from esperia.subscription import ConfigurationError
 
 
@@ -37,19 +38,30 @@ class LlamaProvider:
     billing_mode = "local"
 
     def __init__(
-        self, base_url: str = "http://127.0.0.1:8080", model: str | None = None
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        settings: Settings | None = None,
     ):
-        self.base_url = loopback_url(base_url)
-        self.model_name = model or ""
+        self.settings = settings or Settings()
+        self.base_url = loopback_url(
+            base_url if base_url is not None else self.settings.llama_url
+        )
+        self.model_name = model or self.settings.llama_model or ""
         self.cache_identity = self.base_url
         self.client = httpx.Client(
-            base_url=self.base_url, timeout=240, follow_redirects=False, trust_env=False
+            base_url=self.base_url,
+            timeout=self.settings.llama_timeout,
+            follow_redirects=False,
+            trust_env=False,
         )
 
     def check_login(self) -> None:
         """Check server health/model metadata; local inference needs no subscription login."""
         try:
-            response = self.client.get("/v1/models", timeout=10)
+            response = self.client.get(
+                "/v1/models", timeout=self.settings.metadata_timeout
+            )
             response.raise_for_status()
             models = response.json()["data"]
             if not models or (not self.model_name and len(models) != 1):
@@ -91,7 +103,7 @@ class LlamaProvider:
                         {"role": "user", "content": prompt},
                     ],
                     "max_tokens": maximum,
-                    "temperature": 0.1,
+                    "temperature": self.settings.llama_temperature,
                     "stream": False,
                     "response_format": {"type": "json_object", "schema": schema},
                 },

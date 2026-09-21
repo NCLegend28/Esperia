@@ -9,25 +9,12 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 from pydantic import BaseModel, Field, TypeAdapter
 
-ALLOWED_HOSTS = frozenset(
-    {
-        "investors.ionq.com",
-        "www.ionq.com",
-        "investors.rigetti.com",
-        "ir.infleqtion.com",
-        "investors.xanadu.ai",
-        "ir.arqit.uk",
-        "www.sealsq.com",
-        "www.sec.gov",
-        "d1io3yog0oux5.cloudfront.net",
-    }
-)
-MAX_BYTES = 2_000_000
+from esperia.network import PublicTransport, validate_public_url
+from esperia.settings import Settings
 
 
 class Source(BaseModel):
@@ -41,6 +28,7 @@ class Source(BaseModel):
     content_type: str = "text/html"
     truncated: bool
     extraction_version: int = 1
+    projection_chars: int | None = Field(default=None, ge=1, le=12000)
     passages: list[tuple[int, int]] = Field(default_factory=list)
     extracted_sha256: str | None = None
     discovered_from: str | None = None
@@ -67,34 +55,26 @@ class TextExtractor(HTMLParser):
             self.parts.append(data.strip())
 
 
-def validate_url(url: str) -> None:
-    """Reject unapproved hosts, credentials, non-HTTPS URLs and custom ports."""
-    parsed = urlsplit(url)
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname not in ALLOWED_HOSTS
-        or parsed.username
-        or parsed.password
-        or parsed.port not in {None, 443}
-        or parsed.fragment
-    ):
-        raise ValueError("Source URL is outside the approved HTTPS domain policy")
+def validate_url(url: str, settings: Settings | None = None) -> None:
+    """Validate public HTTPS syntax and an optional explicit owner host policy."""
+    validate_public_url(url, settings or Settings())
 
 
-def _collect_once(urls: list[str], output: Path) -> list[Source]:
-    """Fetch 1–12 approved HTML/text sources without redirects or proxy inheritance.
+def _collect_once(urls: list[str], output: Path, settings: Settings) -> list[Source]:
+    """Fetch bounded public HTML/text sources without redirects or proxy inheritance.
 
     A failed source aborts collection. Partial snapshots remain available but are
     never silently substituted for a complete manifest. PDFs require a later adapter.
     """
-    if not 1 <= len(urls) <= 12 or len(set(urls)) != len(urls):
-        raise ValueError("Provide 1–12 distinct source URLs")
+    if not 1 <= len(urls) <= settings.max_seeds or len(set(urls)) != len(urls):
+        raise ValueError(f"Provide 1–{settings.max_seeds} distinct source URLs")
     for url in urls:
-        validate_url(url)
+        validate_url(url, settings)
     output.mkdir(parents=True, exist_ok=True)
     sources: list[Source] = []
     with httpx.Client(
-        timeout=30,
+        timeout=settings.http_timeout,
+        transport=PublicTransport(settings),
         follow_redirects=False,
         trust_env=False,
     ) as client:
@@ -110,8 +90,10 @@ def _collect_once(urls: list[str], output: Path) -> list[Source]:
                 body = bytearray()
                 for chunk in response.iter_bytes():
                     body.extend(chunk)
-                    if len(body) > MAX_BYTES:
-                        raise ValueError("Source exceeds the 2 MB download limit")
+                    if len(body) > settings.html_bytes:
+                        raise ValueError(
+                            f"Source exceeds the {settings.html_bytes}-byte download limit"
+                        )
             digest = sha256(body).hexdigest()
             snapshot = output / f"{digest}.source"
             if not snapshot.exists():
@@ -125,7 +107,7 @@ def _collect_once(urls: list[str], output: Path) -> list[Source]:
             parser = TextExtractor()
             parser.feed(decoded)
             text = " ".join(parser.parts) if kind != "text/plain" else decoded
-            if len(text) < 100:
+            if len(text) < settings.minimum_text:
                 raise ValueError("Source contains insufficient readable text")
             sources.append(
                 Source(
@@ -134,8 +116,9 @@ def _collect_once(urls: list[str], output: Path) -> list[Source]:
                     url=url,
                     fetched_at=datetime.now(UTC).isoformat(),
                     sha256=digest,
-                    text=text[:12000],
-                    truncated=len(text) > 12000,
+                    text=text[: settings.source_chars],
+                    projection_chars=settings.source_chars,
+                    truncated=len(text) > settings.source_chars,
                 )
             )
             (output / f"S{index}.json").write_text(
@@ -147,43 +130,47 @@ def _collect_once(urls: list[str], output: Path) -> list[Source]:
     return sources
 
 
-def collect(urls: list[str], output: Path) -> list[Source]:
-    """Retry an idempotent public-source collection once on a transport timeout.
+def collect(
+    urls: list[str], output: Path, settings: Settings | None = None
+) -> list[Source]:
+    """Retry idempotent source collection within the configured timeout-retry budget.
 
     Completed snapshots and individual source metadata survive partial failures.
     Access denials and validation errors are never retried or bypassed.
     """
-    for attempt in range(2):
+    settings = settings or Settings()
+    for attempt in range(settings.collect_retries + 1):
         try:
-            return _collect_once(urls, output)
+            return _collect_once(urls, output, settings)
         except httpx.TimeoutException:
-            if attempt:
+            if attempt == settings.collect_retries:
                 raise
             print(
-                "Public-source timeout; retrying collection once. No model call was made.",
+                "Public-source timeout; retrying within the configured collection budget. No model call was made.",
                 flush=True,
             )
     raise AssertionError("Unreachable")
 
 
-def load_archive(path: Path) -> list[Source]:
-    """Reuse at most 48-hour-old snapshots after hash and extracted-text checks.
+def load_archive(path: Path, settings: Settings | None = None) -> list[Source]:
+    """Reuse snapshots within the configured freshness window after integrity checks.
 
     Example: sources = load_archive(Path(".local/dev/research/JOB/evidence"))
     This avoids refetching evidence when fixing configuration or provider access.
     """
+    settings = settings or Settings()
     sources = TypeAdapter(list[Source]).validate_json(
         (path / "sources.json").read_text()
     )
     if not 1 <= len(sources) <= 24 or len({s.id for s in sources}) != len(sources):
         raise ValueError("Invalid archive source identities")
     for source in sources:
-        validate_url(source.url)
+        validate_url(source.url, settings)
         fetched = datetime.fromisoformat(source.fetched_at)
         if fetched.tzinfo is None:
             raise ValueError("Archive dates must include a timezone")
         age = (datetime.now(UTC) - fetched).total_seconds()
-        if not 0 <= age <= 172800:
+        if not 0 <= age <= settings.archive_hours * 3600:
             raise ValueError("Archive is stale or future-dated; collect fresh evidence")
         raw = (path / f"{source.sha256}.source").read_bytes()
         if sha256(raw).hexdigest() != source.sha256:
@@ -192,7 +179,7 @@ def load_archive(path: Path) -> list[Source]:
             from esperia.discovery import extract_document, projected_text
 
             text = extract_document(
-                raw, source.content_type, path / f"{source.sha256}.source"
+                raw, source.content_type, path / f"{source.sha256}.source", settings
             )
             if sha256(text.encode()).hexdigest() != source.extracted_sha256:
                 raise ValueError("Extracted document hash mismatch")
@@ -220,6 +207,10 @@ def load_archive(path: Path) -> list[Source]:
         text = (
             decoded if source.content_type == "text/plain" else " ".join(parser.parts)
         )
-        if text[:12000] != source.text or source.truncated != (len(text) > 12000):
+        # Legacy v1 archives used a 12,000-character projection.
+        projection = source.projection_chars or 12000
+        if text[:projection] != source.text or source.truncated != (
+            len(text) > projection
+        ):
             raise ValueError("Archive extracted text was modified")
     return sources

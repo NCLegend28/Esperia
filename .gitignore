@@ -12,3 +12,6 @@ dist/
 .local/
 private/
 .DS_Store
+
+# Owner-local operational choices
+esperia.json

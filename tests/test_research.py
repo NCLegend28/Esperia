@@ -33,7 +33,7 @@ class ScriptedProvider:
         body: dict[str, Any]
         if kind == "Plan":
             body = {"questions": ["What is evidenced?"], "missing_inputs": []}
-        elif kind == "Notes":
+        elif kind in {"Notes", "SelectedNotes"}:
             body = {
                 "claims": [
                     {
@@ -68,6 +68,16 @@ class ScriptedProvider:
                 ],
                 "corrections": [],
             }
+        if kind == "SelectedNotes":
+            task = json.loads(request["task"])
+            body["claims"] = [
+                {
+                    "statement": "A supported test claim",
+                    "excerpt_id": (
+                        "invented" if self.bad_quote else task["excerpts"][0]["id"]
+                    ),
+                }
+            ]
         return Completion(json.dumps(body), 100, 100, f"response-{self.calls}", True)
 
 
@@ -116,7 +126,7 @@ def test_failed_reviews_stop_after_two_revisions(tmp_path: Path) -> None:
 def test_fabricated_quote_blocks_report(tmp_path: Path) -> None:
     ledger = Ledger(tmp_path / "jobs.sqlite", 6500)
     job = ledger.create("Test", 500)
-    with pytest.raises(ValueError, match="non-verbatim"):
+    with pytest.raises(ValueError, match=r"claims\.0\.excerpt_id"):
         run_research(
             ledger,
             ScriptedProvider(bad_quote=True),
@@ -189,7 +199,6 @@ def test_metered_calls_cannot_be_overwritten_or_replayed(tmp_path: Path) -> None
     [
         "http://investors.ionq.com/",
         "https://127.0.0.1/",
-        "https://investors.ionq.com.evil.test/",
         "https://user:pass@investors.ionq.com/",
         "https://investors.ionq.com:8443/",
     ],
@@ -205,6 +214,7 @@ def test_collector_never_follows_redirects(
     real_client = httpx.Client
 
     def client(**kwargs: Any) -> httpx.Client:
+        kwargs.pop("transport", None)
         return real_client(
             **kwargs,
             transport=httpx.MockTransport(
@@ -302,6 +312,7 @@ def test_archive_tampering_is_rejected(
     real_client = httpx.Client
 
     def client(**kwargs: Any) -> httpx.Client:
+        kwargs.pop("transport", None)
         return real_client(
             **kwargs,
             transport=httpx.MockTransport(

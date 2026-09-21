@@ -12,6 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from esperia.provider import Completion
+from esperia.settings import Settings
 
 
 def subscription_environment() -> dict[str, str]:
@@ -60,7 +61,10 @@ class CodexSubscriptionProvider:
 
     billing_mode = "subscription"
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | None = None, search: bool = False) -> None:
+        self.settings = settings or Settings()
+        self.search = search
+        self.cache_identity = self.settings.model_dump_json() + str(search)
         self.binary = find_codex()
 
     def check_login(self) -> None:
@@ -71,7 +75,7 @@ class CodexSubscriptionProvider:
                 capture_output=True,
                 text=True,
                 env=subscription_environment(),
-                timeout=20,
+                timeout=self.settings.login_timeout,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
@@ -95,7 +99,7 @@ class CodexSubscriptionProvider:
         bounded; subscription quotas are enforced by Codex, not inferred from dollars.
         """
         self.check_login()
-        if len(prompt.encode()) > 180000:
+        if len(prompt.encode()) > self.settings.prompt_bytes:
             raise ValueError("Research context is too large")
         with TemporaryDirectory(prefix="esperia-codex-") as temporary:
             folder = Path(temporary)
@@ -122,11 +126,11 @@ class CodexSubscriptionProvider:
                 "-c",
                 'model_provider="openai"',
                 "-c",
-                'web_search="disabled"',
+                'web_search="live"' if self.search else 'web_search="disabled"',
                 "-c",
                 'approval_policy="never"',
                 "-c",
-                'model_reasoning_effort="low"',
+                f'model_reasoning_effort="{self.settings.reasoning_effort}"',
                 "--model",
                 model,
                 "--cd",
@@ -145,7 +149,7 @@ class CodexSubscriptionProvider:
                 capture_output=True,
                 text=True,
                 env=subscription_environment(),
-                timeout=240,
+                timeout=self.settings.codex_timeout,
                 check=False,
             )
             if result.returncode or not output.exists():

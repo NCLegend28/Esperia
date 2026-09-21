@@ -1,0 +1,8 @@
+{
+  "source_search": "tools",
+  "search": {
+    "endpoint": "http://127.0.0.1:8082/search",
+    "max_calls": 3,
+    "results": 8
+  }
+}

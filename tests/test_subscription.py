@@ -67,7 +67,9 @@ def test_failed_preflight_explains_login_without_creating_job(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ESPERIA_DATABASE", str(tmp_path / "jobs.sqlite"))
-    monkeypatch.setattr(CodexSubscriptionProvider, "__init__", lambda self: None)
+    monkeypatch.setattr(
+        CodexSubscriptionProvider, "__init__", lambda self, *args, **kwargs: None
+    )
 
     def reject(self: CodexSubscriptionProvider) -> None:
         raise ConfigurationError("Sign in with ChatGPT")

@@ -65,7 +65,7 @@ def test_local_selection_materializes_exact_quote_and_preserves_raw(
 
 def test_unknown_excerpt_fails_without_review_or_cache(tmp_path: Path) -> None:
     worker = LocalSelectionWorker(bad_ref=True)
-    with pytest.raises(OutputValidationError, match="unknown excerpt ID"):
+    with pytest.raises(OutputValidationError, match=r"claims\.0\.excerpt_id"):
         execute(tmp_path, worker)
     assert worker.calls == 1
     assert not list((tmp_path / "cache").glob("*.json"))

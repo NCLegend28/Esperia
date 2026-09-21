@@ -75,7 +75,9 @@ def test_plan_includes_validation_and_makes_no_child(tmp_path: Path) -> None:
 def test_repair_has_fresh_review_and_durable_lineage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("esperia.repair.collect", lambda urls, output: [source()])
+    monkeypatch.setattr(
+        "esperia.repair.collect", lambda urls, output, settings=None: [source()]
+    )
     ledger, job = parent(tmp_path)
     worker = RepairWorker()
     report = run_repair(ledger, tmp_path, job, worker, None, "ollama", [source().url])
@@ -95,7 +97,9 @@ def test_repair_has_fresh_review_and_durable_lineage(
 def test_failed_task_cannot_pass_even_when_general_checks_pass(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("esperia.repair.collect", lambda urls, output: [source()])
+    monkeypatch.setattr(
+        "esperia.repair.collect", lambda urls, output, settings=None: [source()]
+    )
     ledger, job = parent(tmp_path)
     report = run_repair(
         ledger,
@@ -114,9 +118,11 @@ def test_failed_task_cannot_pass_even_when_general_checks_pass(
 def test_omitted_task_verdict_blocks_child(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("esperia.repair.collect", lambda urls, output: [source()])
+    monkeypatch.setattr(
+        "esperia.repair.collect", lambda urls, output, settings=None: [source()]
+    )
     ledger, job = parent(tmp_path)
-    with pytest.raises(OutputValidationError, match="every assigned"):
+    with pytest.raises(OutputValidationError, match="repair_checks"):
         run_repair(
             ledger,
             tmp_path,
@@ -134,7 +140,7 @@ def test_omitted_task_verdict_blocks_child(
 def test_collection_failure_retains_blocked_assignments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def failure(urls: list[str], output: Path) -> list[Source]:
+    def failure(urls: list[str], output: Path, settings: object = None) -> list[Source]:
         raise ValueError("No source")
 
     monkeypatch.setattr("esperia.repair.collect", failure)

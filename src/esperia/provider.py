@@ -9,30 +9,45 @@ from decimal import ROUND_CEILING, Decimal
 
 from openai import APIStatusError, DefaultHttpxClient, OpenAI
 
+from esperia.settings import Settings
+
 # Conservative standard-processing LONG-context rates, checked 2026-09-13.
 # Source: https://developers.openai.com/api/docs/pricing
 # Units: USD cents per million tokens. No cache discount is assumed.
-RATES: dict[str, tuple[int, int]] = {
-    "gpt-5.6-terra": (200, 900),
-    "gpt-6-astra": (1000, 3750),
-}
+RATES = Settings().api_rates
 
 
-def cost_cents(model: str, input_tokens: int, output_tokens: int) -> int:
+def cost_cents(
+    model: str, input_tokens: int, output_tokens: int, settings: Settings | None = None
+) -> int:
     """Conservatively account token usage; not a provider invoice reconciliation."""
-    if model not in RATES or min(input_tokens, output_tokens) < 0:
+    rates = (settings or Settings()).api_rates
+    if model not in rates or min(input_tokens, output_tokens) < 0:
         raise ValueError("Unknown model or invalid usage")
-    incoming, outgoing = RATES[model]
+    incoming, outgoing = rates[model]
     amount = Decimal(input_tokens * incoming + output_tokens * outgoing) / 1_000_000
     return int(amount.to_integral_value(rounding=ROUND_CEILING))
 
 
-def reservation_cents(model: str, instructions: str, prompt: str, maximum: int) -> int:
+def reservation_cents(
+    model: str,
+    instructions: str,
+    prompt: str,
+    maximum: int,
+    settings: Settings | None = None,
+) -> int:
     """Reserve using UTF-8 byte count plus framing allowance as a token bound."""
-    if len(prompt.encode()) > 180_000 or not 1 <= maximum <= 8000:
+    settings = settings or Settings()
+    if len(prompt.encode()) > settings.prompt_bytes or not 1 <= maximum <= 8000:
         raise ValueError("Request exceeds the bounded research context/output policy")
     return max(
-        1, cost_cents(model, len((instructions + prompt).encode()) + 4096, maximum)
+        1,
+        cost_cents(
+            model,
+            len((instructions + prompt).encode()) + settings.api_framing_tokens,
+            maximum,
+            settings,
+        ),
     )
 
 
@@ -60,22 +75,25 @@ class ProviderFailure(RuntimeError):
 class OpenAIProvider:
     """Use the official endpoint with explicit credentials and zero automatic retries."""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, settings: Settings | None = None):
+        self.settings = settings or Settings()
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is not configured")
         self.client = OpenAI(
             api_key=api_key,
             base_url="https://api.openai.com/v1",
             max_retries=0,
-            timeout=180,
-            http_client=DefaultHttpxClient(trust_env=False, timeout=180),
+            timeout=self.settings.api_timeout,
+            http_client=DefaultHttpxClient(
+                trust_env=False, timeout=self.settings.api_timeout
+            ),
         )
 
     def complete(
         self, model: str, instructions: str, prompt: str, maximum: int
     ) -> Completion:
         """Perform one bounded text call. Caller reserves before invoking this method."""
-        if model not in RATES:
+        if model not in self.settings.api_rates:
             raise ValueError("Model has no reviewed rate configuration")
         try:
             response = self.client.responses.create(
@@ -85,7 +103,7 @@ class OpenAIProvider:
                 max_output_tokens=maximum,
                 store=False,
                 service_tier="default",
-                reasoning={"effort": "low"},
+                reasoning={"effort": self.settings.reasoning_effort},
             )
         except APIStatusError as error:
             known = {

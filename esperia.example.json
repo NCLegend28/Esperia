@@ -1,0 +1,48 @@
+{
+  "data_root": ".local/dev",
+  "backend": "codex",
+  "mode": "economy",
+  "source_search": "codex",
+  "allowed_hosts": [],
+  "planner_model": "gpt-6-astra",
+  "analyst_model": "gpt-5.6-terra",
+  "reviewer_model": "gpt-6-astra",
+  "source_model": "gpt-5.6-terra",
+  "reasoning_effort": "low",
+  "max_calls": 32,
+  "revision_rounds": 2,
+  "documents": 18,
+  "requests": 36,
+  "depth": 2,
+  "codex_timeout": 240,
+  "archive_hours": 48,
+  "profile": {
+    "name": "general",
+    "version": "1",
+    "checks": [
+      "scope",
+      "citations",
+      "reasoning",
+      "counterarguments",
+      "uncertainty"
+    ],
+    "discovery_terms": []
+  },
+  "search": {
+    "endpoint": null,
+    "max_calls": 3,
+    "results": 8,
+    "query_chars": 1000,
+    "text_chars": 800,
+    "response_bytes": 1000000,
+    "output_bytes": 24000,
+    "timeout_seconds": 30
+  },
+  "agent": {
+    "steps": 10,
+    "seconds": 1800,
+    "repeated_actions": 2,
+    "read_calls": 4,
+    "observation_chars": 4000
+  }
+}

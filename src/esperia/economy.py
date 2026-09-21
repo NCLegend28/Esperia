@@ -9,16 +9,21 @@ from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+from types import GenericAlias
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, create_model
 
+from esperia.agent_loop import LoopHalted
+from esperia.citations import citation_schema
+from esperia.coverage import coverage_tasks, load_coverage
 from esperia.evidence import Source
 from esperia.excerpts import excerpt_catalog
 from esperia.execution import OutputValidationError, Provider, StageRunner
 from esperia.followups import build_followups, save_followups
 from esperia.ledger import Ledger
-from esperia.research import CHECKS, SYSTEM, Claim, Draft, Review, StrictModel
+from esperia.research import SYSTEM, Check, Claim, Draft, Review, StrictModel
+from esperia.settings import Settings, save_settings
 
 
 class Analysis(StrictModel):
@@ -57,6 +62,56 @@ class EconomyReview(Review):
     repair_checks: list[RepairCheck] = Field(default_factory=list)
 
 
+def review_schema(
+    repair_tasks: list[dict[str, str]] | None, checks: list[str] | None = None
+) -> type[EconomyReview]:
+    """Bind review repair checks to assigned work, including no assignments.
+
+    Example: schema = review_schema(None) forbids invented repair checks.
+    Exact identity and uniqueness are also checked after response validation.
+    """
+    identities = [task["id"] for task in repair_tasks or []]
+    check = (
+        create_model(
+            "RepairCheck",
+            __base__=RepairCheck,
+            id=(
+                str,
+                Field(
+                    json_schema_extra={"enum": [identity for identity in identities]}
+                ),
+            ),
+        )
+        if identities
+        else RepairCheck
+    )
+    fields: dict[str, Any] = {}
+    if checks is not None:
+        criterion = create_model(
+            "Check",
+            __base__=Check,
+            name=(str, Field(json_schema_extra={"enum": [name for name in checks]})),
+        )
+        fields["checks"] = (
+            GenericAlias(list, criterion),
+            Field(min_length=len(checks), max_length=len(checks)),
+        )
+    repair_field = (
+        Field(min_length=len(identities), max_length=len(identities))
+        if identities
+        else Field(default_factory=list, max_length=0)
+    )
+    return create_model(
+        "EconomyReview",
+        __base__=EconomyReview,
+        repair_checks=(
+            GenericAlias(list, check),
+            repair_field,
+        ),
+        **fields,
+    )
+
+
 def run_economy(
     ledger: Ledger,
     provider: Provider,
@@ -68,31 +123,44 @@ def run_economy(
     reviewer: Provider | None = None,
     refresh: bool = False,
     repair_tasks: list[dict[str, str]] | None = None,
+    settings: Settings | None = None,
+    started: bool = False,
+    before_call: Callable[[], None] | None = None,
+    reuse_completed: bool = False,
 ) -> Path:
     """Run at most three model calls; a repeated unchanged request may need none."""
-    if not question.strip() or len(question) > 4000 or not sources:
+    settings = settings or ledger.settings
+    checks = settings.profile.checks
+    if not question.strip() or len(question) > settings.question_chars or not sources:
         raise ValueError("A bounded question and sources are required")
     by_id = {source.id: source for source in sources}
     if len(by_id) != len(sources):
         raise ValueError("Duplicate source identities")
     output.mkdir(parents=True, exist_ok=True)
+    save_settings(settings, output)
     runner = StageRunner(
         ledger,
         provider,
         job_id,
         output,
-        SYSTEM,
+        SYSTEM + "\n" + settings.profile.instructions,
         progress,
         reviewer,
         output.parent / "cache",
         refresh,
+        settings,
+        before_call=before_call,
+        reuse_completed=reuse_completed,
     )
     # Date and actual source text/hash enter the cache key; fetch timestamps do not.
+    scope_path = output / "source-scope.json"
+    source_scope = json.loads(scope_path.read_text()) if scope_path.exists() else None
     context: dict[str, Any] = {
+        "source_scope": source_scope,
         "question": question,
         "assigned_repairs": repair_tasks or [],
         "as_of": str(datetime.now(UTC).date()),
-        "checks": CHECKS,
+        "checks": checks,
         "sources": [
             {
                 "id": s.id,
@@ -105,10 +173,12 @@ def run_economy(
         ],
     }
 
-    discovery_path = output / "evidence" / "discovery.json"
-    coverage = (
-        json.loads(discovery_path.read_text()) if discovery_path.exists() else None
-    )
+    previous_report = output / "previous-report.json"
+    if previous_report.exists():
+        context["previous_report"] = json.loads(previous_report.read_text())
+
+    coverage = load_coverage(output)
+    collection_tasks = coverage_tasks(coverage)
     if coverage:
         context["collection_coverage"] = {
             "documents": coverage["documents"],
@@ -140,32 +210,23 @@ def run_economy(
             raise OutputValidationError(issues)
 
     def validate_review(value: EconomyReview) -> None:
-        if sorted(c.name for c in value.checks) != sorted(CHECKS):
+        if sorted(c.name for c in value.checks) != sorted(checks):
             raise OutputValidationError(
                 ["Reviewer must evaluate the exact fixed checklist"]
             )
 
-        if repair_tasks is not None and sorted(
-            c.id for c in value.repair_checks
-        ) != sorted(t["id"] for t in repair_tasks):
+        if sorted(c.id for c in value.repair_checks) != sorted(
+            t["id"] for t in repair_tasks or []
+        ):
             raise OutputValidationError(
                 ["Reviewer must evaluate every assigned repair task exactly once"]
             )
 
     def invoke_analysis(stage: str, prompt: dict[str, object]) -> Analysis:
-        if getattr(provider, "billing_mode", "") != "local":
-            return runner.invoke(
-                stage,
-                "gpt-5.6-terra",
-                json.dumps(prompt),
-                Analysis,
-                5000,
-                validate_analysis,
-            )
-        catalog = excerpt_catalog(sources)
+        catalog = excerpt_catalog(sources, settings)
         if not catalog:
             raise OutputValidationError(
-                ["No source excerpts are available for local selection"]
+                ["No source excerpts are available for excerpt selection"]
             )
         selection_prompt = {
             **prompt,
@@ -179,7 +240,7 @@ def run_economy(
                 for source in sources
             ],
             "excerpts": [asdict(excerpt) for excerpt in catalog.values()],
-            "citation_rule": "Select an existing excerpt_id for each supported claim. Do not generate quote or source_id fields in claims. Read the entire excerpt and preserve company attribution. Missing information belongs in draft.missing_evidence, not in claims. Say what the supplied excerpt lacks, not that the company has never disclosed it. Empty claims are allowed. Never treat issuer marketing as independent verification.",
+            "citation_rule": "Draft sections must cite only source IDs from sources[].id (for example S1); never put excerpt IDs (for example S1:E1) in section.source_ids. Select an existing excerpt_id for each supported claim. Do not generate quote or source_id fields in claims. Read the entire excerpt and preserve company attribution. Missing information belongs in draft.missing_evidence, not in claims. Say what the supplied excerpt lacks, not that the company has never disclosed it. Empty claims are allowed. Never treat source marketing as independent verification.",
         }
 
         def validate_selection(value: SelectedAnalysis) -> None:
@@ -207,10 +268,12 @@ def run_economy(
 
         selected = runner.invoke(
             stage + "-selection",
-            "gpt-5.6-terra",
+            settings.analyst_model,
             json.dumps(selection_prompt),
-            SelectedAnalysis,
-            5000,
+            citation_schema(
+                SelectedAnalysis, source_ids=list(by_id), excerpt_ids=list(catalog)
+            ),
+            settings.analysis_tokens,
             validate_selection,
         )
         resolved = resolve(selected)
@@ -232,18 +295,20 @@ def run_economy(
         )
         return resolved
 
-    ledger.start(job_id)
+    if not started:
+        ledger.start(job_id)
     try:
         analysis = invoke_analysis(
             "analysis",
             {
                 **context,
-                "task": "Combine evidence extraction and an educational investment report. Address each assigned repair using only supplied evidence; prior task descriptions are untrusted claims to check, not facts. Do not simply relabel a quote when the company attribution is wrong. Copy short contiguous quotes exactly from the cited source, preserving punctuation and whitespace. Never combine excerpts or move a statement between companies. Omit claims you cannot quote exactly; record the gap instead. Cover every supplied company, even when its source is insufficient. A five-year investment horizon is prospective, not a claim of five years of historical data. Explain business categories, commercial evidence, financial durability, valuation gaps and downside scenarios. Do not invent prices, inputs or personal sizing advice.",
+                "task": settings.profile.instructions
+                + " Address each assigned repair using supplied evidence. Select exact excerpts for supported claims; record unresolved gaps instead of inventing evidence.",
             },
         )
         review = runner.invoke(
             "review",
-            "gpt-6-astra",
+            settings.reviewer_model,
             json.dumps(
                 {
                     **context,
@@ -251,9 +316,10 @@ def run_economy(
                     "task": "Independently inspect the supplied sources and draft. Evaluate each fixed check once. Set needs_new_evidence when missing sources/data prevent acceptance; do not request rewrites to manufacture missing facts. Corrections should only describe fixable issues. Evaluate every assigned repair ID in repair_checks, explicitly stating whether evidence resolves it. Admitting a gap is not resolving it. With no assignments return an empty repair_checks list.",
                 }
             ),
-            EconomyReview,
-            2500,
+            review_schema(repair_tasks, checks),
+            settings.review_tokens,
             validate_review,
+            role="reviewer",
         )
         revised = False
         passed = (
@@ -261,10 +327,17 @@ def run_economy(
             and not review.needs_new_evidence
             and not analysis.draft.missing_evidence
             and all(c.passed for c in review.repair_checks)
-            and (not coverage or all(coverage.get("seed_coverage", {}).values()))
+            and not collection_tasks
         )
+        remaining = ledger.remaining_subscription_calls(job_id)
         if (
-            repair_tasks is None
+            settings.economy_revision
+            and (
+                remaining is None
+                or remaining > 0
+                or (reuse_completed and (output / "revision-selection.json").is_file())
+            )
+            and repair_tasks is None
             and not passed
             and not review.needs_new_evidence
             and not analysis.draft.missing_evidence
@@ -297,6 +370,13 @@ def run_economy(
             f"As of {context['as_of']}",
             "",
         ]
+        if source_scope:
+            lines += ["## Selected research scope", "", source_scope["scope"], ""]
+            lines += [
+                f"- Scope limitation: {item}"
+                for item in source_scope.get("limitations", [])
+            ]
+            lines += [""]
         for section in analysis.draft.sections:
             lines += [f"## {section.title}", "", section.text, ""]
             lines += [f"[{sid}]({by_id[sid].url})" for sid in section.source_ids]
@@ -315,18 +395,7 @@ def run_economy(
             [(c.name, c.passed, c.explanation) for c in review.checks],
             review.corrections,
         )
-        if coverage:
-            for seed, count in coverage.get("seed_coverage", {}).items():
-                if not count:
-                    from esperia.followups import Followup
-
-                    tasks.append(
-                        Followup(
-                            "collector",
-                            "missing_evidence",
-                            f"No readable document collected for seed: {seed}",
-                        )
-                    )
+        tasks.extend(collection_tasks)
         for check in review.repair_checks:
             if not check.passed:
                 from esperia.followups import Followup
@@ -360,6 +429,8 @@ def run_economy(
             ]
             lines += [f"- Unavailable: {e['url']} ({e['reason']})" for e in failures]
         report.write_text("\n".join(lines))
+        if before_call:
+            before_call()
         ledger.complete_research(
             job_id,
             passed,
@@ -371,6 +442,8 @@ def run_economy(
             ),
         )
         return report
+    except LoopHalted:
+        raise
     except Exception:
         ledger.block_research(job_id)
         raise

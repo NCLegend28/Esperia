@@ -12,6 +12,7 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from esperia.discovery import BREAK, discover, projected_text, select_passages
 from esperia.evidence import load_archive
 from esperia.excerpts import excerpt_catalog
+from esperia.settings import Profile, Settings
 
 
 def test_follow_financial_link_and_record_failure(tmp_path: Path) -> None:
@@ -47,6 +48,10 @@ def test_follow_financial_link_and_record_failure(tmp_path: Path) -> None:
             max_documents=3,
             max_requests=4,
             client=client,
+            settings=Settings(
+                allowed_hosts=["ir.arqit.uk"],
+                profile=Profile(discovery_terms=["annual", "earnings"]),
+            ),
         )
     assert len(sources) == 2
     assert any(s.discovered_from for s in sources)
@@ -232,12 +237,13 @@ def test_filing_table_context_ranks_opaque_document_links() -> None:
         '<table><tr><td>2026 10-Q Quarterly financial statements</td><td><a href="/static-files/abc">PDF</a></td></tr></table>'
     )
     href, label = parser.links[0]
-    assert link_score(href, label, "cash flow") > link_score(
-        "/financial-information/sec-filings", "SEC Filings", "cash flow"
-    )
-    assert (
-        link_score("/sec-filings?sort=asc", "Financial information", "financial") == 0
-    )
+    assert link_score(
+        href,
+        label,
+        "cash flow",
+        Settings(profile=Profile(discovery_terms=["10-q", "financial"])),
+    ) > link_score("/financial-information/sec-filings", "SEC Filings", "cash flow")
+    assert link_score("/privacy", "Privacy", "financial") == 0
 
 
 def test_final_redirect_attempt_is_logged(tmp_path: Path) -> None:

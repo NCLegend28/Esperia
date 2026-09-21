@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from esperia.evidence import Source
+from esperia.settings import Settings
 
 
 @dataclass(frozen=True)
@@ -22,15 +23,18 @@ class Excerpt:
     quote: str
 
 
-def excerpt_catalog(sources: Sequence[Source]) -> dict[str, Excerpt]:
-    """Index overlapping 500-character slices without dropping source text."""
+def excerpt_catalog(
+    sources: Sequence[Source], settings: Settings | None = None
+) -> dict[str, Excerpt]:
+    """Index configured overlapping slices while preserving exact source text."""
+    settings = settings or Settings()
     result: dict[str, Excerpt] = {}
     for source in sources:
         offset = 0
         number = 0
         for part in source.text.split("\n[EXCERPT BREAK]\n"):
-            for local_start in range(0, len(part), 400):
-                end = min(local_start + 500, len(part))
+            for local_start in range(0, len(part), settings.excerpt_stride):
+                end = min(local_start + settings.excerpt_chars, len(part))
                 if end - local_start < 20:
                     continue
                 number += 1

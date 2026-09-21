@@ -1,3 +1,9 @@
+# Planning index — 2026-09-17
+
+The established city concept below is retained. Current planning is split into [appearance and interaction](appearance-spec.md), [functional behavior](functional-spec.md), [delivery roadmap](roadmap.md) and [task backlog](../TASKS.md). These distinguish implemented capabilities from proposals. Quantum research below is the original example, not a global task scope. New visual details and timeline assumptions remain proposals until reviewed.
+
+---
+
 # Subscription execution amendment — 2026-09-13
 
 The owner requires existing subscriptions, not API credits. The research console now uses official Codex non-interactive execution with forced ChatGPT login and no API-key fallback. Subscription call limits replace model-dollar reservations. The earlier API-first architecture and provider spending envelope below are historical proposals and superseded for model execution. Claude subscription support remains planned; scheduling and server authentication still require implementation.

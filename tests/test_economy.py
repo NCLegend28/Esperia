@@ -30,7 +30,7 @@ class Worker:
         self.calls += 1
         kind = json.loads(prompt)["output_schema"]["title"]
         body: dict[str, Any]
-        if kind == "Analysis":
+        if kind in {"Analysis", "SelectedAnalysis"}:
             body = {
                 "claims": [
                     {
@@ -64,6 +64,16 @@ class Worker:
                 "corrections": [] if self.passed else ["Fix wording"],
                 "needs_new_evidence": self.missing,
             }
+        if kind == "SelectedAnalysis":
+            task = json.loads(json.loads(prompt)["task"])
+            body["claims"] = [
+                {
+                    "statement": "Test fact",
+                    "excerpt_id": (
+                        "invented" if self.bad_quote else task["excerpts"][0]["id"]
+                    ),
+                }
+            ]
         return Completion(json.dumps(body), 100, 100, f"test-{self.calls}", True)
 
 
@@ -136,20 +146,19 @@ def test_bad_quote_never_cached(tmp_path: Path) -> None:
 
 def test_bad_quote_has_diagnostic_and_preserves_response(tmp_path: Path) -> None:
     worker = Worker(bad_quote=True)
-    with pytest.raises(ValueError, match="Claim 1: quote is not verbatim in S1"):
+    with pytest.raises(ValueError, match=r"claims\.0\.excerpt_id"):
         execute(tmp_path, worker)
-    artifacts = list(tmp_path.glob("*/analysis-validation.json"))
+    artifacts = list(tmp_path.glob("*/analysis-selection-validation.json"))
     assert len(artifacts) == 1
     diagnostic = json.loads(artifacts[0].read_text())
     assert diagnostic["automatic_retry"] is False
     assert "Fabricated quote" not in artifacts[0].read_text()
-    assert (artifacts[0].parent / "analysis.json").exists()
+    assert (artifacts[0].parent / "analysis-selection.json").exists()
     assert worker.calls == 1
     assert Ledger(tmp_path / "jobs.sqlite", 0).list_jobs()[0]["state"] == "blocked"
 
 
 def test_cross_company_quote_is_not_reassigned(tmp_path: Path) -> None:
-    from esperia.execution import OutputValidationError
 
     ledger = Ledger(tmp_path / "jobs.sqlite", 0)
     job = ledger.create_subscription("Compare", 3)
@@ -170,11 +179,25 @@ def test_cross_company_quote_is_not_reassigned(tmp_path: Path) -> None:
             1,
         )
     ]
-    worker = Worker()
-    with pytest.raises(OutputValidationError, match="quote occurs in S2"):
-        run_economy(ledger, worker, job, "Compare", sources, tmp_path / job)
-    assert worker.calls == 1
-    assert not list((tmp_path / "cache").glob("*.json"))
+
+    class SelectSecond(Worker):
+        def complete(
+            self, model: str, instructions: str, prompt: str, maximum: int
+        ) -> Completion:
+            result = super().complete(model, instructions, prompt, maximum)
+            if json.loads(prompt)["output_schema"]["title"] == "SelectedAnalysis":
+                body = json.loads(result.text)
+                body["claims"][0]["excerpt_id"] = "S2:E1"
+                return Completion(json.dumps(body), 100, 100, result.response_id, True)
+            return result
+
+    worker = SelectSecond()
+    run_economy(ledger, worker, job, "Compare", sources, tmp_path / job)
+    resolved = json.loads(
+        json.loads((tmp_path / job / "analysis.json").read_text())["text"]
+    )
+    assert resolved["claims"][0]["source_id"] == "S2"
+    assert resolved["claims"][0]["quote"] == sources[1].text
 
 
 def test_invalid_schema_redacts_model_output(tmp_path: Path) -> None:

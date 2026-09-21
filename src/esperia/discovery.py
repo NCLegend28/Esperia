@@ -19,27 +19,10 @@ from urllib.parse import urldefrag, urljoin
 import httpx
 
 from esperia.evidence import Source, TextExtractor, validate_url
+from esperia.network import PublicTransport
+from esperia.settings import Settings
 
 BREAK = "\n[EXCERPT BREAK]\n"
-TERMS = (
-    "annual",
-    "20-f",
-    "10-k",
-    "10-q",
-    "6-k",
-    "financial",
-    "earnings",
-    "cash flow",
-    "balance sheet",
-    "risk factors",
-    "dilution",
-    "warrants",
-    "shares outstanding",
-    "revenue",
-    "debt",
-    "loss",
-    "liquidity",
-)
 
 
 class DiscoveryFailure(ValueError):
@@ -49,8 +32,9 @@ class DiscoveryFailure(ValueError):
 class Links(HTMLParser):
     """Read anchor labels and URLs as untrusted data."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         super().__init__()
+        self.settings = settings or Settings()
         self.links: list[tuple[str, str]] = []
         self.href: str | None = None
         self.label: list[str] = []
@@ -73,7 +57,7 @@ class Links(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "tr" and self.row_start is not None:
-            context = " ".join(self.row_text)[:3000]
+            context = " ".join(self.row_text)[: self.settings.link_context_chars]
             for i in range(self.row_start, len(self.links)):
                 href, label = self.links[i]
                 self.links[i] = (href, label + " " + context)
@@ -83,37 +67,50 @@ class Links(HTMLParser):
             self.href = None
 
 
-def link_score(url: str, label: str, query: str) -> int:
-    """Prioritize filings and financial documents, with a modest recency preference."""
-    text = (url + " " + label).lower()
-    if any(t in text for t in (".zip", "webcast", "login", "privacy", "unsubscribe")):
+def query_terms(query: str, settings: Settings) -> set[str]:
+    """Keep Unicode words and short domain acronyms, e.g. oil, gas, wind and LNG."""
+    return {
+        term
+        for term in re.findall(r"[^\W_]+", query.casefold())
+        if len(term) >= settings.query_term_min and term not in settings.query_stopwords
+    }
+
+
+def link_score(
+    url: str, label: str, query: str, settings: Settings | None = None
+) -> int:
+    """Rank query relevance with an optional explicit domain profile."""
+    settings = settings or Settings()
+    text = (url + " " + label).casefold()
+    if any(term.casefold() in text for term in settings.excluded_link_terms):
         return 0
-    if ("sort=" in url or "order=" in url) and "page=" not in url:
-        return 0
-    if any(t in text for t in ("exx31", "exx32", "ex-31", "ex-32")):
-        return 0
-    score = sum(3 for term in TERMS if term in text)
-    score += (
-        6 if any(t in text for t in ("20-f", "10-k", "10-q", "annual-report")) else 0
+    score = sum(
+        settings.query_weight for term in query_terms(query, settings) if term in text
     )
-    score += 4 if ".pdf" in text else 0
     score += sum(
-        1 for term in set(re.findall(r"[a-z]{5,}", query.lower())) if term in text
+        settings.profile_weight
+        for term in settings.profile.discovery_terms
+        if term.casefold() in text
     )
-    if score:
-        score += 2 if str(datetime.now(UTC).year) in text else 0
+    score += settings.pdf_weight if ".pdf" in text else 0
+    if score and str(datetime.now(UTC).year) in text:
+        score += settings.recency_weight
     return score
 
 
-def extract_document(raw: bytes, kind: str, snapshot: Path) -> str:
-    """Extract a fetched document; PDF work is isolated with a 45-second timeout."""
+def extract_document(
+    raw: bytes, kind: str, snapshot: Path, settings: Settings | None = None
+) -> str:
+    """Extract a document with isolated, time-bounded PDF processing."""
+    settings = settings or Settings()
     if kind == "application/pdf":
         try:
             response = subprocess.run(
                 [sys.executable, "-m", "esperia.pdftext", str(snapshot)],
+                input=settings.model_dump_json(),
                 capture_output=True,
                 text=True,
-                timeout=45,
+                timeout=settings.pdf_timeout,
                 check=False,
             )
             if response.returncode:
@@ -132,17 +129,22 @@ def extract_document(raw: bytes, kind: str, snapshot: Path) -> str:
     return " ".join(parser.parts)
 
 
-def select_passages(text: str, query: str, budget: int) -> list[tuple[int, int]]:
+def select_passages(
+    text: str, query: str, budget: int, settings: Settings | None = None
+) -> list[tuple[int, int]]:
     """Select document-wide passages, including identity/context and diverse financial terms."""
+    settings = settings or Settings()
+    width = min(settings.passage_chars, budget)
     if len(text) <= budget:
         return [(0, len(text))]
-    windows = [(i, min(i + 900, len(text))) for i in range(0, len(text), 900)]
-    terms = list(TERMS) + list(set(re.findall(r"[a-z]{5,}", query.lower())))
+    windows = [(i, min(i + width, len(text))) for i in range(0, len(text), width)]
+    terms = settings.profile.discovery_terms + sorted(query_terms(query, settings))
     selected = [windows[0]]
     remaining = windows[1:]
     covered: set[str] = set()
     while (
-        remaining and len(selected) * 900 + len(selected) * len(BREAK) + 900 <= budget
+        remaining
+        and len(selected) * width + len(selected) * len(BREAK) + width <= budget
     ):
 
         def score(window: tuple[int, int]) -> int:
@@ -167,23 +169,32 @@ def discover(
     seeds: list[str],
     query: str,
     output: Path,
-    max_documents: int = 18,
-    max_requests: int = 36,
+    max_documents: int | None = None,
+    max_requests: int | None = None,
     client: httpx.Client | None = None,
+    settings: Settings | None = None,
 ) -> list[Source]:
-    """Round-robin crawl up to depth two; failures and out-of-policy links are recorded."""
+    """Round-robin crawl within configured limits, recording failures and exclusions."""
+    settings = settings or Settings()
+    max_documents = settings.documents if max_documents is None else max_documents
+    max_requests = settings.requests if max_requests is None else max_requests
     if (
-        not 1 <= len(seeds) <= 12
+        not 1 <= len(seeds) <= settings.max_seeds
         or len(set(seeds)) != len(seeds)
         or not len(seeds) <= max_documents <= 24
-        or not max_documents <= max_requests <= 48
+        or not max_documents <= max_requests <= 128
     ):
         raise ValueError("Invalid bounded discovery limits or seed list")
     for url in seeds:
-        validate_url(url)
+        validate_url(url, settings)
     output.mkdir(parents=True, exist_ok=True)
     owned = client is None
-    http = client or httpx.Client(timeout=20, follow_redirects=False, trust_env=False)
+    http = client or httpx.Client(
+        timeout=settings.http_timeout,
+        follow_redirects=False,
+        trust_env=False,
+        transport=PublicTransport(settings),
+    )
     queues: list[deque[tuple[str, int, str | None]]] = [
         deque([(url, 0, None)]) for url in seeds
     ]
@@ -215,8 +226,8 @@ def discover(
                             target = urldefrag(
                                 urljoin(url, response.headers.get("location", ""))
                             )[0]
-                            validate_url(target)
-                            if depth < 2:
+                            validate_url(target, settings)
+                            if depth < settings.depth:
                                 queue.appendleft((target, depth + 1, url))
                             events.append(
                                 {"url": url, "status": "redirect", "target": target}
@@ -231,8 +242,10 @@ def discover(
                         raw = bytearray()
                         for part in response.iter_bytes():
                             raw.extend(part)
-                            if len(raw) > 25_000_000:
-                                raise ValueError("Document exceeds 25 MB")
+                            if len(raw) > settings.document_bytes:
+                                raise ValueError(
+                                    f"Document exceeds {settings.document_bytes} bytes"
+                                )
                     if bytes(raw[:5]) == b"%PDF-":
                         kind = "application/pdf"
                     if kind not in {
@@ -245,8 +258,12 @@ def discover(
                     digest = sha256(raw).hexdigest()
                     snapshot = output / f"{digest}.source"
                     snapshot.write_bytes(raw)
-                    text = extract_document(bytes(raw), kind, snapshot)
-                    if not 100 <= len(text) <= 2_000_000:
+                    text = extract_document(bytes(raw), kind, snapshot, settings)
+                    if (
+                        not settings.minimum_text
+                        <= len(text)
+                        <= settings.extracted_chars
+                    ):
                         raise ValueError("Insufficient or excessive extracted text")
                     (output / f"{digest}.txt").write_text(text)
                     documents.append(
@@ -269,17 +286,20 @@ def discover(
                             "sha256": digest,
                         }
                     )
-                    if depth < 2 and kind in {"text/html", "application/xhtml+xml"}:
-                        parser = Links()
+                    if depth < settings.depth and kind in {
+                        "text/html",
+                        "application/xhtml+xml",
+                    }:
+                        parser = Links(settings)
                         parser.feed(bytes(raw).decode("utf-8", errors="replace"))
                         candidates: dict[str, int] = {}
-                        for href, label in parser.links[:2000]:
+                        for href, label in parser.links[: settings.links_per_page]:
                             link = urldefrag(urljoin(url, href))[0]
-                            score = link_score(link, label, query)
+                            score = link_score(link, label, query, settings)
                             if not score or link in visited:
                                 continue
                             try:
-                                validate_url(link)
+                                validate_url(link, settings)
                             except ValueError:
                                 events.append(
                                     {
@@ -291,7 +311,7 @@ def discover(
                                 continue
                             candidates[link] = max(score, candidates.get(link, 0))
                         ranked = sorted(candidates, key=lambda key: -candidates[key])[
-                            :8
+                            : settings.followed_links
                         ]
                         for link in reversed(ranked):
                             queue.appendleft((link, depth + 1, url))
@@ -328,7 +348,7 @@ def discover(
                             "limits": {
                                 "documents": max_documents,
                                 "requests": max_requests,
-                                "depth": 2,
+                                "depth": settings.depth,
                             },
                         },
                         indent=2,
@@ -352,7 +372,7 @@ def discover(
                 "limits": {
                     "documents": max_documents,
                     "requests": max_requests,
-                    "depth": 2,
+                    "depth": settings.depth,
                 },
             },
             indent=2,
@@ -362,10 +382,10 @@ def discover(
         raise DiscoveryFailure(
             f"Discovery collected no readable documents. Coverage details: {(output / 'discovery.json').resolve()}"
         )
-    budget = min(12000, 60000 // len(documents))
+    budget = min(settings.source_chars, settings.evidence_chars // len(documents))
     sources: list[Source] = []
     for index, doc in enumerate(documents, 1):
-        ranges = select_passages(doc["text"], query, budget)
+        ranges = select_passages(doc["text"], query, budget, settings)
         source = Source(
             id=f"S{index}",
             url=doc["url"],

@@ -1,3 +1,9 @@
+# Current planning index — 2026-09-17
+
+Use the [roadmap](roadmap.md) and [TASKS](../TASKS.md) for current priorities, dependencies and phase gates. The checklist below is historical and is not the current delivery status: its general-search/PDF items overlap capabilities subsequently implemented. See [configuration remediation](configuration-remediation.md) for the latest recorded code baseline. Preserve these historical records without treating old unchecked compound items as proof that every listed capability is missing.
+
+---
+
 # Milestone tracker
 
 ## 0 — Specification and local ledger

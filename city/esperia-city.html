@@ -1,0 +1,1207 @@
+<title>Esperia Massing Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0f1118; --panel:#161923; --panel-2:#1c2030;
+    --ink:#e6e9f2; --muted:#8e97ad; --line:#272c3d;
+    --cyan:#3fd8f0; --mag:#ff5fd2; --amber:#ffb45c; --green:#7dffb0; --gold:#d8ad55;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#e9ebf1; --panel:#ffffff; --panel-2:#f2f4f9;
+      --ink:#171a24; --muted:#5d6579; --line:#d5d9e5;
+      --cyan:#0e93a8; --mag:#c2299b; --amber:#b86a12; --green:#1f9a5c; --gold:#9a7226;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#e9ebf1; --panel:#ffffff; --panel-2:#f2f4f9;
+    --ink:#171a24; --muted:#5d6579; --line:#d5d9e5;
+    --cyan:#0e93a8; --mag:#c2299b; --amber:#b86a12; --green:#1f9a5c; --gold:#9a7226;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px; line-height:1.5; overflow:hidden}
+  #app{height:100%; display:grid; grid-template-columns:1fr 320px; grid-template-rows:auto 1fr}
+  #top{grid-column:1/-1; display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:9px 16px; padding-top:calc(9px + env(safe-area-inset-top,0px)); background:var(--panel); border-bottom:1px solid var(--line)}
+  #top .brand{font-weight:700; font-size:15px; letter-spacing:-.01em}
+  #top .brand span{color:var(--muted); font-weight:500}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  #top .tag{margin-left:auto; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--amber); border:1px solid currentColor; border-radius:2px; padding:2px 6px; white-space:nowrap}
+
+  #stage{position:relative; min-width:0; min-height:0; background:#12141f}
+  canvas{display:block; width:100%; height:100%; touch-action:none; cursor:grab}
+  canvas.pick{cursor:pointer}
+  #hint{position:absolute; left:14px; bottom:14px; pointer-events:none; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.04em; color:#c7cde0; background:rgba(14,16,26,.7); backdrop-filter:blur(3px); border-radius:3px; padding:5px 9px; line-height:1.65}
+
+  #side{background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:16px 18px; padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  #side > div{display:flex; flex-direction:column; gap:18px}
+  h2{margin:0 0 8px; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-family:"IBM Plex Mono",ui-monospace,monospace}
+  h1{margin:0 0 2px; font-size:20px; font-weight:700; letter-spacing:-.01em; line-height:1.2; text-wrap:balance}
+  p{margin:0 0 8px; color:var(--muted); font-size:12.5px}
+  p.lead{color:var(--ink)}
+  p:last-child{margin-bottom:0}
+  .rule{height:1px; background:var(--line); border:0; margin:0}
+
+  .list{display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden}
+  .list > div{display:grid; grid-template-columns:14px 1fr; gap:10px; align-items:start; background:var(--panel); padding:8px 10px}
+  .list .sw{width:12px; height:12px; border-radius:2px; margin-top:4px}
+  .list b{font-weight:600; font-size:12.5px; display:block}
+  .list em{font-style:normal; color:var(--muted); font-size:11.5px}
+  .list code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; color:var(--gold); font-weight:600}
+
+  label.ctl{display:block; font-size:12px; color:var(--muted); margin-bottom:4px}
+  label.ctl b{color:var(--ink); font-weight:600; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; float:right}
+  input[type=range]{width:100%; accent-color:var(--cyan); margin:0 0 10px}
+  .tog{display:flex; align-items:center; gap:9px; padding:7px 9px; border:1px solid var(--line); border-radius:4px; background:var(--panel-2); cursor:pointer; user-select:none; font-size:12.5px}
+  .tog input{margin:0; accent-color:var(--cyan)}
+  .tog:focus-within{outline:2px solid var(--cyan); outline-offset:1px}
+  .btn{appearance:none; border:1px solid var(--line); background:var(--panel-2); color:var(--ink); font:inherit; font-size:12.5px; font-weight:500; padding:8px 11px; border-radius:4px; cursor:pointer}
+  .btn:hover{border-color:var(--cyan)}
+  .btn:focus-visible{outline:2px solid var(--cyan); outline-offset:1px}
+  .btn.primary{background:var(--cyan); color:#0b1014; border-color:var(--cyan); font-weight:600}
+  .btn.ghost{padding:4px 8px; font-size:11.5px}
+  .note{font-size:11.5px; color:var(--muted); border-left:2px solid var(--gold); padding:2px 0 2px 10px; margin-top:10px}
+  .note b{color:var(--ink); font-weight:600}
+
+  /* inspect */
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); margin-bottom:4px}
+  .pill{display:inline-block; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:2px 7px; border-radius:2px; border:1px solid currentColor; vertical-align:middle}
+  .pill.work{color:var(--amber)} .pill.commute{color:var(--cyan)} .pill.return{color:var(--cyan)} .pill.home{color:var(--muted)} .pill.empty{color:var(--line)}
+  .kv{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden}
+  .kv div{background:var(--panel); padding:7px 10px}
+  .kv i{display:block; font-style:normal; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .kv b{font-weight:600; font-size:13px; font-variant-numeric:tabular-nums}
+  .floors{display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden}
+  .floor{display:grid; grid-template-columns:30px 1fr; gap:8px; background:var(--panel); padding:8px 10px; align-items:start}
+  .floor .fno{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; color:var(--muted); padding-top:2px}
+  .floor b{font-weight:600; font-size:12.5px; display:block}
+  .floor.empty b{color:var(--muted); font-weight:500}
+  .floor[data-floor]{cursor:pointer}
+  .floor[data-floor]:hover, .floor[data-floor]:focus-visible{background:var(--panel-2); outline:none}
+  .floor .open{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px; color:var(--cyan); font-weight:500; margin-left:6px; opacity:0; transition:opacity .12s}
+  .floor:hover .open, .floor:focus-visible .open{opacity:1}
+  .chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:5px}
+  .chip{appearance:none; border:1px solid var(--line); background:var(--panel-2); color:var(--ink); font:inherit; font-size:11.5px; padding:3px 8px; border-radius:3px; cursor:pointer; display:inline-flex; align-items:center; gap:6px}
+  .chip:hover{border-color:var(--cyan)}
+  .chip .dot{width:7px; height:7px; border-radius:50%; background:var(--muted)}
+  .chip.work .dot{background:var(--amber)} .chip.commute .dot,.chip.return .dot{background:var(--cyan)}
+  .chip.vacant{color:var(--muted); border-style:dashed; cursor:default}
+  .task{font-size:12.5px; color:var(--ink); background:var(--panel-2); border-radius:4px; padding:8px 10px; border-left:2px solid var(--amber)}
+  .row{display:flex; gap:8px; flex-wrap:wrap}
+
+  /* ---- floor scene: plan on the left, data on the right ---- */
+  #app.floormode{grid-template-columns:minmax(300px,42%) 1fr}
+  #app.floormode #stage{background:#0d0f17}
+  #app.floormode #hint{display:none}
+  #fc{display:none; position:absolute; inset:0; image-rendering:pixelated; image-rendering:crisp-edges; cursor:default}
+  #app.floormode #c{display:none}
+  #app.floormode #fc{display:block}
+  #fc.pick{cursor:pointer}
+  #app.floormode #side{padding:16px 22px}
+  .fhead{display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap}
+  .fhead .grow{flex:1; min-width:200px}
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit, minmax(96px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden}
+  .tiles div{background:var(--panel); padding:9px 11px}
+  .tiles i{display:block; font-style:normal; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:2px}
+  .tiles b{font-weight:600; font-size:18px; font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+  .tiles b small{font-size:11px; color:var(--muted); font-weight:500}
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px}
+  .card{border:1px solid var(--line); border-radius:4px; padding:12px 14px; background:var(--panel)}
+  .card.span2{grid-column:1/-1}
+  .proj .title{font-weight:600; font-size:14px; margin-bottom:6px}
+  .proj .meta{display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:12px; color:var(--muted)}
+  .proj .meta span:nth-child(odd){font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding-top:2px}
+  .proj .meta span:nth-child(even){color:var(--ink)}
+  table.roster{width:100%; border-collapse:collapse; font-size:12px}
+  table.roster td{padding:6px 4px; border-top:1px solid var(--line); vertical-align:top}
+  table.roster tr:first-child td{border-top:0}
+  table.roster .nm{appearance:none; border:0; background:none; color:var(--ink); font:inherit; font-weight:600; cursor:pointer; padding:0; text-align:left}
+  table.roster .nm:hover{color:var(--cyan)}
+  table.roster .tk{color:var(--muted); max-width:260px}
+  table.roster .num{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; text-align:right; white-space:nowrap; color:var(--muted)}
+  ul.log{list-style:none; margin:0; padding:0; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; line-height:1.7; max-height:260px; overflow:auto}
+  ul.log li{display:grid; grid-template-columns:62px 1fr; gap:10px; color:var(--ink)}
+  ul.log li .ts{color:var(--muted)}
+  ul.log li.tool{color:var(--muted)} ul.log li.arrive{color:var(--cyan)} ul.log li.done{color:var(--amber)} ul.log li.fail{color:var(--mag)}
+  ul.log li em{font-style:normal; color:var(--gold)}
+  @media (max-width:860px){
+    #app.floormode{grid-template-columns:1fr}
+  }
+  @media (max-width:860px){
+    body{overflow:auto}
+    #app{grid-template-columns:1fr; grid-template-rows:auto 58vh auto; height:auto; min-height:100%}
+    #side{border-left:0; border-top:1px solid var(--line)}
+    #top .tag{margin-left:0}
+  }
+</style>
+
+<div id="app">
+  <header id="top">
+    <div class="brand">Esperia <span>· block 0 · inspection study</span></div>
+    <div class="tag">Look study — jobs, stats and traffic are simulated</div>
+  </header>
+
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <canvas id="fc"></canvas>
+    <div id="hint">CLICK a labelled building → a floor → an avatar · CLICK ground to step back · DRAG pan · SCROLL zoom · RIGHT-DRAG orbit</div>
+  </div>
+
+  <aside id="side">
+    <div id="overview">
+      <section>
+        <h2>Block 0 — the capital</h2>
+        <p class="lead">One board is one city block. Zoned in rings: civic core, homes, work, storage, ports.</p>
+        <div class="list">
+          <div><span class="sw" style="background:var(--gold)"></span><span><b>City Hall — centre</b><em>Mayor, ledger, approvals, operations. Block 0 stays the capital when the city grows.</em></span></div>
+          <div><span class="sw" style="background:var(--amber)"></span><span><b>Residential — inner ring</b><em>Where agents live. When a job starts they commute to their building; when it ends they walk home.</em></span></div>
+          <div><span class="sw" style="background:var(--cyan)"></span><span><b>Commerce — middle ring</b><em>Research, Quant Desk, Evaluation Lab, Editorial House, Ops. Click one to see its floors.</em></span></div>
+          <div><span class="sw" style="background:var(--green)"></span><span><b>Industrial — outer ring</b><em>Storage. The Library is known within it, beside Port E.</em></span></div>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section>
+        <h2>Simulate</h2>
+        <div class="row">
+          <button class="btn primary" id="dispatch">Dispatch a job</button>
+          <button class="btn" id="dispatch5">Dispatch five</button>
+        </div>
+        <p class="note">A dispatched agent leaves home, walks to its building and works on a floor there. In the real build this is the job ledger, not a button.</p>
+      </section>
+
+      <hr class="rule">
+
+      <section>
+        <h2>Controls</h2>
+        <label class="ctl" for="traffic">Data traffic <b id="trafficV">60%</b></label>
+        <input type="range" id="traffic" min="0" max="100" value="60">
+        <label class="tog"><input type="checkbox" id="neon" checked> Neon roof edges</label>
+      </section>
+
+      <hr class="rule">
+
+      <section>
+        <h2>Ports — every edge</h2>
+        <p>Gold edge connectors <span class="mono" style="color:var(--gold)">J1–J4</span>. Sources arrive through them today; the next block docks to one of them later. Block 0 remains the capital.</p>
+      </section>
+    </div>
+
+    <div id="inspect" hidden>
+      <div class="row"><button class="btn ghost" id="back">← Overview</button></div>
+      <div id="inspectBody"></div>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var rng = mulberry32(20260921);
+  function rand(a,b){ return a + rng()*(b-a); }
+  function pick(a){ return a[Math.floor(rng()*a.length)]; }
+  function irand(a,b){ return a + Math.floor(rng()*(b-a+1)); }
+
+  // ---------------- grid ----------------
+  var N = 13, BLOCK = 14, ST = 4, PITCH = BLOCK + ST;
+  var SIZE = N*PITCH + ST, HALF = SIZE/2, MID = (N-1)/2;
+  function sc(k){ return -HALF + ST/2 + k*PITCH; }
+  function bo(i){ return -HALF + ST + i*PITCH; }
+  function bc(i){ return bo(i) + BLOCK/2; }
+  var RES = 0, COM = 1, IND = 2;
+  function ring(i,j){ return Math.max(Math.abs(i-MID), Math.abs(j-MID)); }
+  function district(i, j){
+    var r = ring(i,j), d = r <= 2 ? RES : (r <= 4 ? COM : IND);
+    if (r === 3 && ((i*31 + j*17) % 7) === 0) d = RES;
+    if (r === 5 && ((i*13 + j*29) % 6) === 0) d = COM;
+    return d;
+  }
+  var EMPTY = [ [MID-2,MID+2,'U4'], [MID-4,MID-2,'U5'], [MID+6,MID-5,'U6'] ];
+  function isEmpty(i,j){ for (var e=0;e<EMPTY.length;e++) if (EMPTY[e][0]===i && EMPTY[e][1]===j) return EMPTY[e][2]; return null; }
+
+  // ---------------- palette ----------------
+  var SKY = 0x161a2c;
+  var C = {
+    res:[0x3a3340,0x443a47,0x4a4250,0x36303c], com:[0x2a2f47,0x313a58,0x3a3456,0x262b40], ind:[0x2c3a37,0x334441,0x2a3331,0x3a4a45],
+    plinth:0x1a1d28, metal:0x8f97a6, gold:0xd8ad55, amber:0xffb45c, cyan:0x3fd8f0, mag:0xff5fd2, green:0x7dffb0, white:0xeef2ff
+  };
+
+  // ---------------- named buildings (the inspectable ones) ----------------
+  var BUILDINGS = [
+    { id:'u1', code:'U1', name:'City Hall', ring:'Centre', block:[MID,MID], purpose:'Mayor, budget ledger, approval inbox and the city-wide job board. Block 0 stays the capital.',
+      env:{w:6.2,d:6.2,h:34,y0:3.8}, divisions:[ {name:'Mayor’s office',role:'Mayor',offices:2},{name:'Budget ledger',role:'Ledger clerk',offices:2},{name:'Approvals',role:'Approvals officer',offices:2},{name:'Operations',role:'Operations',offices:3} ] },
+    { id:'u3', code:'U3', name:'Research', ring:'Commerce', block:[MID,MID-3], purpose:'Investigation workers, analysis and the independent review that gates every report.',
+      env:{w:13.4,d:11.5,h:19,y0:1.2}, divisions:[ {name:'Source discovery',role:'Source scout',offices:4},{name:'Analysis',role:'Analyst',offices:4},{name:'Independent review',role:'Reviewer',offices:3},{name:'Editorial desk',role:'Editor',offices:2} ] },
+    { id:'u2', code:'U2', name:'Library', ring:'Industrial', block:[MID+5,MID], purpose:'Discipline collections of archived public sources. Known within industrial, beside Port E.',
+      env:{w:12,d:12,h:14,y0:1.2}, divisions:[ {name:'Archive intake',role:'Archivist',offices:2},{name:'Energy collection',role:'Curator',offices:2},{name:'Quantum collection',role:'Curator',offices:2},{name:'Reading room',role:'Librarian',offices:1} ] },
+    { id:'t1', code:'U7', name:'Quant Desk', ring:'Commerce', block:[MID-3,MID], purpose:'Signals, backtests and the hand-off to Financio. Researches and proposes; never trades.',
+      env:{w:10,d:10,h:30,y0:0.6}, tower:true, divisions:[ {name:'Signals',role:'Signal researcher',offices:3},{name:'Backtests',role:'Quant analyst',offices:3},{name:'Execution liaison',role:'Liaison',offices:2} ] },
+    { id:'t2', code:'U8', name:'Evaluation Lab', ring:'Commerce', block:[MID+3,MID], purpose:'Held-out cases, thresholds and model comparisons. Decides what counts as good.',
+      env:{w:9,d:11,h:24,y0:0.6}, tower:true, divisions:[ {name:'Cases',role:'Case author',offices:3},{name:'Scoring',role:'Evaluator',offices:3} ] },
+    { id:'t3', code:'U9', name:'Editorial House', ring:'Commerce', block:[MID,MID+3], purpose:'Reports, citations and dissent made readable.',
+      env:{w:11,d:9,h:22,y0:0.6}, tower:true, divisions:[ {name:'Drafting',role:'Writer',offices:3},{name:'Citations',role:'Citation checker',offices:3} ] },
+    { id:'t4', code:'U10', name:'Ops & Reliability', ring:'Commerce', block:[MID+3,MID+3], purpose:'Waits, failures, budgets and recovery. Explains, never self-grants.',
+      env:{w:10,d:10,h:18,y0:0.6}, tower:true, divisions:[ {name:'Worker health',role:'Operator',offices:2},{name:'Budgets',role:'Budget officer',offices:2},{name:'Recovery',role:'Recovery lead',offices:2} ] }
+  ];
+  var PROJECTS = {
+    u1:{ job:'e9549ef3', title:'Compare energy companies — 5-year growth', stage:'Report registered · awaiting owner decision', backend:'ollama · economy', budget:'11 / 12 calls', since:'14:02' },
+    u3:{ job:'153acaac', title:'Compare energy companies — 5-year growth', stage:'Investigation · reads 2 of 4 · 1 search left', backend:'ollama · qwen2.5:7b', budget:'7 / 12 calls', since:'14:06' },
+    u2:{ job:'archive', title:'Intake: 18 archived documents, 1 PDF', stage:'Hash revalidation · freshness window 48h', backend:'no model calls', budget:'—', since:'13:40' },
+    t1:{ job:'hyp-0007', title:'Financing cost leads demand growth', stage:'Backtest package · inputs pinned', backend:'sandboxed calc', budget:'4 / 26 calls', since:'11:15' },
+    t2:{ job:'28db498e', title:'Baseline energy evaluation', stage:'Scoring relevance on held-out cases', backend:'deterministic + live', budget:'9 / 26 calls', since:'09:30' },
+    t3:{ job:'153acaac', title:'Report draft v2', stage:'Citation resolution · 1 rejected ID', backend:'ollama · qwen2.5:7b', budget:'3 / 12 calls', since:'14:20' },
+    t4:{ job:'ops', title:'Worker health', stage:'Lease heartbeat nominal · 0 uncertain outcomes', backend:'no model calls', budget:'—', since:'08:00' }
+  };
+  var LOG = [];
+  function stamp(){ var d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function(n){ return String(n).padStart(2,'0'); }).join(':'); }
+  function logEvent(b, kind, html){ LOG.push({ t:stamp(), b:b, kind:kind, html:html }); if (LOG.length > 400) LOG.shift(); }
+  var BY_ID = {}, BY_BLOCK = {};
+  BUILDINGS.forEach(function(b){
+    b.project = PROJECTS[b.id];
+    BY_ID[b.id] = b; BY_BLOCK[b.block[0]+','+b.block[1]] = b;
+    b.env.x = bc(b.block[0]); b.env.z = bc(b.block[1]);
+    b.door = [b.block[0], b.block[1]+1];             // SW corner intersection
+    b.inside = 0; b.range = {};
+    b.divisions.forEach(function(d){ d.agents = []; });
+  });
+
+  // ---------------- agents ----------------
+  var FIRST = ['Ada','Bram','Cato','Dara','Eero','Fen','Gale','Hiro','Idris','Juno','Kai','Lior','Mika','Nadia','Odessa','Pax','Quill','Rune','Sable','Tove','Uma','Vesper','Wren','Xun','Yara','Zeph','Anouk','Bo','Cyra','Dov','Elio','Faye','Gus','Halle','Ines','Jem','Kit','Lena','Mose','Nell','Orin','Pia','Remy','Sol','Tam','Ula','Vik','Wynn'];
+  var MODELS = ['qwen2.5:7b · ollama','gpt-5.6-terra · codex','gpt-6-astra · codex','llama.cpp · local'];
+  var TASKS = {
+    'Source scout':['Select public sources for “battery recycling advances”','Bounded search: LNG export capacity 2026–2031','Reject unavailable page, search alternate source'],
+    'Analyst':['Select excerpt IDs supporting demand-growth claim','Resolve conflicting revenue figures across two filings','Map period and currency on quarterly table'],
+    'Reviewer':['Independent check: citations vs original excerpts','Verify counterargument coverage','Fail check: valuation evidence missing'],
+    'Editor':['Draft section 3 from selected notes','Rewrite uncertainty statement for clarity'],
+    'Mayor':['Scope request and reserve call budget','Allocate follow-up within approved envelope'],
+    'Ledger clerk':['Settle 12 reserved calls on job 153acaac','Reconcile uncertain call from interrupted run'],
+    'Approvals officer':['Stage report SHA for owner decision','Hold acceptance: two checks failed'],
+    'Operations':['Explain provider timeout to owner','Record pause boundary for job e9549ef3'],
+    'Archivist':['Verify raw hashes on 18 archived documents','File PDF extraction with page bounds'],
+    'Curator':['Cross-list filing into energy and quantum racks','Mark stale archive past 48h window'],
+    'Librarian':['Serve archived original to reading panel'],
+    'Signal researcher':['Test whether grid constraints predict exposure','Hypothesis: financing cost leads demand'],
+    'Quant analyst':['Rerun archived inputs with pinned parameters','Invalidate dependents after input change'],
+    'Liaison':['Package proposal for owner approval','Post realized P&L back as outcome record'],
+    'Case author':['Freeze held-out nonfinancial case','Add tool-injection temptation case'],
+    'Evaluator':['Score relevance on baseline job 28db498e','Compare two worker models on same cases'],
+    'Writer':['Draft executive summary with dissent preserved'],
+    'Citation checker':['Reject invented excerpt ID S14','Confirm quote resolves to archived text'],
+    'Operator':['Watch lease heartbeat on worker 2'],
+    'Budget officer':['Reserve review capacity before analysis'],
+    'Recovery lead':['Resume from checkpoint without regenerating decisions']
+  };
+  var agents = [], AK0 = MID-2, AK1 = MID+3;
+  var DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  var resBlocks = [];
+  for (var bi=0;bi<N;bi++) for (var bj=0;bj<N;bj++) if (district(bi,bj)===RES && !isEmpty(bi,bj) && !BY_BLOCK[bi+','+bj]) resBlocks.push([bi,bj]);
+
+  (function assign(){
+    var slots = [];
+    BUILDINGS.forEach(function(b){ b.divisions.forEach(function(d,di){ for (var k=0;k<d.offices;k++) slots.push([b,d,di,k]); }); });
+    // leave a few offices vacant: shuffle then take 48
+    for (var i=slots.length-1;i>0;i--){ var j=Math.floor(rng()*(i+1)); var t=slots[i]; slots[i]=slots[j]; slots[j]=t; }
+    for (var n=0;n<FIRST.length;n++){
+      var s = slots[n], b = s[0], d = s[1];
+      var home = pick(resBlocks);
+      var a = { id:n, code:'A-'+String(n+1).padStart(2,'0'), name:FIRST[n], role:d.role, building:b, division:d, divIdx:s[2], office:s[3],
+        model: b.id==='u1' ? MODELS[1] : pick(MODELS), home:home, homeDoor:[home[0], home[1]+1],
+        allowance: pick([12,12,26,32]), calls:0, tools:irand(0,40), jobs:irand(0,14), blocked:irand(0,3),
+        state:'home', node:[home[0], home[1]+1], next:null, t:0, v:rand(2.2,3.6), wait:0, queue:[], timer:0, side: rng()<0.5?1:-1, task:null, visor: pick([C.cyan,C.mag,C.amber,C.white]), skin: pick([0xd9dbe6,0xc9cfe0,0xe8e3d6,0xbfc7d8]) };
+      a.calls = irand(0, a.allowance);
+      a.next = wanderNext(a);
+      d.agents[s[3]] = a;
+      agents.push(a);
+    }
+  })();
+  var NA = agents.length;
+
+  // ---------------- instance buffers ----------------
+  var boxes=[], cyls=[], wins=[], neons=[];
+  function addBox(x,y,z,w,h,d,c){ boxes.push([x,y,z,w,h,d,c]); }
+  function addCyl(x,y,z,r,h,c){ cyls.push([x,y,z,r,h,c]); }
+  function addNeon(x,y,z,w,h,d,c){ neons.push([x,y,z,w,h,d,c]); }
+  // windows on all four faces: rot 0=+z, 1=+x, 2=-z, 3=-x
+  function addWindows(cx,y0,cz,w,h,d,c,density,cw,ch,yStart){
+    var ys = yStart || 0, rows = Math.max(1, Math.floor((h-ys)/ch));
+    var colsW = Math.max(1, Math.floor(w/cw)), colsD = Math.max(1, Math.floor(d/cw));
+    for (var r=0;r<rows;r++){
+      var y = y0 + ys + (r+0.5)*(h-ys)/rows, q;
+      for (q=0;q<colsW;q++){
+        var x = cx - w/2 + (q+0.5)*w/colsW;
+        if (rng()<density) wins.push([x, y, cz + d/2 + 0.03, 0, cw*0.5, ch*0.45, c]);
+        if (rng()<density) wins.push([x, y, cz - d/2 - 0.03, 2, cw*0.5, ch*0.45, c]);
+      }
+      for (q=0;q<colsD;q++){
+        var z = cz - d/2 + (q+0.5)*d/colsD;
+        if (rng()<density) wins.push([cx + w/2 + 0.03, y, z, 1, cw*0.5, ch*0.45, c]);
+        if (rng()<density) wins.push([cx - w/2 - 0.03, y, z, 3, cw*0.5, ch*0.45, c]);
+      }
+    }
+  }
+  function mark(b){ b.range = { b0:boxes.length, w0:wins.length, n0:neons.length }; }
+  function endMark(b){ b.range.b1 = boxes.length; b.range.w1 = wins.length; b.range.n1 = neons.length; }
+
+  // ---------------- generators ----------------
+  function unit(x,z,w,d,h){
+    addBox(x,0,z,w,h,d,pick(C.res));
+    if (h > 6) addBox(x,h,z,w*0.7,rand(1,2),d*0.7,pick(C.res));
+    addWindows(x,0,z,w,h,d,C.amber, rng()<0.2 ? 0.15 : 0.7, 1.6, 2.0, 0.6);
+    if (rng() < 0.06) addNeon(x + w/2 + 0.05, h*0.55, z, 0.12, 1.4, 0.9, rng()<0.5 ? C.amber : C.mag);
+  }
+  function genResidential(i,j){ var t = (i*7 + j*11) % 3; if (t === 0) resGrid(i,j); else if (t === 1) resRows(i,j); else resCourt(i,j); }
+  function resGrid(i,j){ var ox = bo(i), oz = bo(j), lot = BLOCK/3; for (var a=0;a<3;a++) for (var b=0;b<3;b++){ if (rng() < 0.08) continue; unit(ox + (a+0.5)*lot, oz + (b+0.5)*lot, rand(3.0,3.8), rand(3.0,3.8), rng()<0.15 ? rand(7,10) : rand(2.6,5.6)); } }
+  function resRows(i,j){ var ox = bo(i), oz = bo(j); for (var r=0;r<2;r++){ var z = oz + (r ? 10.6 : 3.4); for (var a=0;a<4;a++) unit(ox + 1.9 + a*3.4, z, 3.0, 4.6, rand(3.5,6.5)); } addNeon(bc(i), 0.9, oz + 7, 0.16, 0.16, 6.5, C.amber); }
+  function resCourt(i,j){ var cx = bc(i), cz = bc(j); [[-4.6,-4.6],[0,-4.9],[4.6,-4.6],[-4.9,0],[4.9,0],[-4.6,4.6],[0,4.9],[4.6,4.6]].forEach(function(o){ unit(cx + o[0], cz + o[1], 3.6, 3.6, rand(3,7)); }); addBox(cx,0,cz,0.35,3.2,0.35,C.metal); addNeon(cx,3.5,cz,0.7,0.5,0.7,C.amber); }
+
+  function roofNeon(cx,h,cz,w,d){
+    if (rng() > 0.72) return;
+    var c = rng() < 0.65 ? C.cyan : C.mag;
+    addNeon(cx, h+0.12, cz + d/2 - 0.12, w, 0.22, 0.22, c);
+    addNeon(cx + w/2 - 0.12, h+0.12, cz, 0.22, 0.22, d, c);
+    if (rng() < 0.3) addNeon(cx + w/2 + 0.05, h*0.5, cz + d/2 + 0.05, 0.16, h*0.9, 0.16, c);
+  }
+  function genCommerce(i,j){
+    var cx = bc(i), cz = bc(j), col = pick(C.com);
+    if (rng() < 0.45){
+      var w = rand(8.5,11.5), d = rand(8.5,11.5), h = rand(16,38);
+      addBox(cx,0,cz,w,h,d,col); addWindows(cx,0,cz,w,h,d,rng()<0.5?C.cyan:C.white,0.62,1.9,2.6,1.2);
+      if (h > 28){ var w2=w*0.62, d2=d*0.62, h2=rand(5,10); addBox(cx,h,cz,w2,h2,d2,col); addWindows(cx,h,cz,w2,h2,d2,C.cyan,0.6,1.9,2.6); h += h2; w = w2; d = d2; }
+      roofNeon(cx,h,cz,w,d);
+    } else {
+      var gap = 1.6, w1 = rand(5,6.4), w2b = BLOCK - w1 - gap - 0.4;
+      var x1 = bo(i) + 0.2 + w1/2, x2 = x1 + w1/2 + gap + w2b/2, dd = rand(9,12.5), h1 = rand(12,28), h3 = rand(12,28);
+      addBox(x1,0,cz,w1,h1,dd,col); addWindows(x1,0,cz,w1,h1,dd,C.cyan,0.6,1.9,2.6,1.2); roofNeon(x1,h1,cz,w1,dd);
+      addBox(x2,0,cz,w2b,h3,dd,pick(C.com)); addWindows(x2,0,cz,w2b,h3,dd,C.white,0.6,1.9,2.6,1.2); roofNeon(x2,h3,cz,w2b,dd);
+    }
+  }
+  function genIndustrial(i,j){
+    var cx = bc(i), cz = bc(j), r = rng();
+    if (r < 0.45){
+      var w = rand(11,13), d = rand(6,8), h = rand(4.5,8), z1 = cz - (rng()<0.5 ? 3 : -3);
+      addBox(cx,0,z1,w,h,d,pick(C.ind)); addWindows(cx,0,z1,w,h,d,C.green,0.35,2.4,2.2,1.4);
+      if (rng()<0.6) addNeon(cx, h+0.12, z1 + d/2 - 0.12, w, 0.2, 0.2, C.green);
+      addBox(cx + rand(-3,3), 0, z1 + (z1<cz? 6.5 : -6.5), rand(5,8), rand(2,3.5), rand(3,4), pick(C.ind));
+    } else if (r < 0.75){
+      var n = 3 + Math.floor(rng()*2);
+      for (var k=0;k<n;k++){ var rr = rand(1.8,2.6), hh = rand(4,9), x = cx + rand(-4.5,4.5), z = cz + rand(-4.5,4.5); addCyl(x,0,z,rr,hh,pick(C.ind)); addCyl(x,hh,z,rr*1.05,0.7,C.plinth); if (rng()<0.5) addNeon(x + rr*0.98, hh*0.75, z, 0.14, 0.14, 0.9, C.green); }
+    } else {
+      addBox(cx,0,cz,12,1,12,C.plinth);
+      for (var s=0;s<4;s++){ var zz = cz + (s-1.5)*2.9; addBox(cx,1,zz,11,rand(6,9),1.3,pick(C.ind)); addBox(cx,1,zz,9,0.4,1.4,C.gold); }
+      addWindows(cx,1,cz+1.5*2.9,11,7,1.3,C.green,0.5,1.6,2.0,0.8);
+    }
+  }
+
+  function genCityHall(b){
+    var cx = b.env.x, cz = b.env.z;
+    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth); addBox(cx,1.2,cz,10,2.6,10,C.metal);
+    mark(b);
+    addBox(cx,3.8,cz,6.2,34,6.2,0x3a405e); addWindows(cx,3.8,cz,6.2,34,6.2,C.white,0.8,1.5,2.4,1);
+    addBox(cx,37.8,cz,4.2,9,4.2,0x2e3350); addWindows(cx,37.8,cz,4.2,9,4.2,C.cyan,0.8,1.4,2.2);
+    addBox(cx,46.8,cz,1.6,7,1.6,C.metal); addNeon(cx,53.8,cz,1.1,1.1,1.1,C.white);
+    addNeon(cx, 37.9, cz + 3.1 - 0.12, 6.2, 0.22, 0.22, C.cyan); addNeon(cx + 3.1 - 0.12, 37.9, cz, 0.22, 0.22, 6.2, C.cyan);
+    addNeon(cx, 46.9, cz + 2.1 - 0.12, 4.2, 0.22, 0.22, C.cyan); addNeon(cx + 2.1 - 0.12, 46.9, cz, 0.22, 0.22, 4.2, C.cyan);
+    endMark(b);
+  }
+  function genResearch(b){
+    var cx = b.env.x, cz = b.env.z;
+    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth);
+    mark(b);
+    for (var f=0;f<7;f++){ var x = cx + (f-3)*1.9, h = 16 + Math.sin(f*1.3)*3.5; addBox(x,1.2,cz,1.3,h,11.5,f%2?0x353b58:0x2c3250); if (f===6) addWindows(x,1.2,cz,1.3,h,11.5,C.cyan,0.7,1.7,2.4,1); }
+    addNeon(cx + 3*1.9 + 0.7, 1.2 + 16 + 0.1, cz, 0.2, 0.2, 11.5, C.cyan);
+    endMark(b);
+  }
+  function genLibrary(b){
+    var cx = b.env.x, cz = b.env.z;
+    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth);
+    mark(b);
+    for (var s=0;s<4;s++){ var zz = cz + (s-1.5)*3.0; addBox(cx,1.2,zz,12,14,1.4,0x3c4a47); addBox(cx,1.2,zz,10,0.5,1.5,C.gold); }
+    addWindows(cx,1.2,cz+1.5*3.0,12,14,1.4,C.amber,0.75,1.5,2.2,1);
+    addNeon(cx, 15.3, cz + 1.5*3.0 + 0.6, 12, 0.2, 0.2, C.amber);
+    endMark(b);
+  }
+  function genTower(b){
+    var e = b.env, col = pick(C.com);
+    addBox(e.x,0,e.z,e.w+2,0.6,e.d+2,C.plinth);
+    mark(b);
+    addBox(e.x,e.y0,e.z,e.w,e.h,e.d,col); addWindows(e.x,e.y0,e.z,e.w,e.h,e.d,C.white,0.65,1.9,2.6,1.2);
+    var c = b.id==='t1' ? C.mag : C.cyan;
+    addNeon(e.x, e.y0+e.h+0.12, e.z + e.d/2 - 0.12, e.w, 0.22, 0.22, c); addNeon(e.x + e.w/2 - 0.12, e.y0+e.h+0.12, e.z, 0.22, 0.22, e.d, c);
+    addNeon(e.x + e.w/2 + 0.05, e.y0 + e.h*0.5, e.z + e.d/2 + 0.05, 0.16, e.h*0.9, 0.16, c);
+    endMark(b);
+  }
+
+  for (var i=0;i<N;i++) for (var j=0;j<N;j++){
+    var nb = BY_BLOCK[i+','+j];
+    if (nb){ if (nb.id==='u1') genCityHall(nb); else if (nb.id==='u3') genResearch(nb); else if (nb.id==='u2') genLibrary(nb); else genTower(nb); continue; }
+    if (isEmpty(i,j)) continue;
+    var d = district(i,j);
+    if (d === RES) genResidential(i,j); else if (d === COM) genCommerce(i,j); else genIndustrial(i,j);
+  }
+
+  // ---------------- board texture ----------------
+  function makeBoardTexture(){
+    var S = 2048, u = S / SIZE;
+    var cv = document.createElement('canvas'); cv.width = cv.height = S;
+    var g = cv.getContext('2d');
+    function PX(x){ return (x + HALF) * u; } function PZ(z){ return (z + HALF) * u; }
+    g.fillStyle = '#111815'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#12151f'; g.fillRect(PX(sc(2)), PZ(sc(2)), PX(sc(11)) - PX(sc(2)), PZ(sc(11)) - PZ(sc(2)));
+    g.fillStyle = '#17141a'; g.fillRect(PX(sc(4)), PZ(sc(4)), PX(sc(9)) - PX(sc(4)), PZ(sc(9)) - PZ(sc(4)));
+    g.strokeStyle = 'rgba(255,255,255,0.035)'; g.lineWidth = 1.5;
+    for (var k = -S; k < S*2; k += 12){ g.beginPath(); g.moveTo(k,0); g.lineTo(k-S,S); g.stroke(); }
+    for (var i=0;i<N;i++) for (var j=0;j<N;j++){
+      if (isEmpty(i,j)) continue;
+      var an = BY_BLOCK[i+','+j];
+      g.fillStyle = an ? '#5a4a26' : 'rgba(255,255,255,0.045)';
+      g.fillRect(PX(bo(i)) + 4, PZ(bo(j)) + 4, BLOCK*u - 8, BLOCK*u - 8);
+      if (an){ g.fillStyle = '#7a6432'; g.fillRect(PX(bo(i)) + 12, PZ(bo(j)) + 12, BLOCK*u - 24, BLOCK*u - 24); }
+    }
+    g.lineCap = 'butt'; g.strokeStyle = '#1f2330'; g.lineWidth = ST*u;
+    for (var s=0;s<=N;s++){ g.beginPath(); g.moveTo(PX(sc(s)), 0); g.lineTo(PX(sc(s)), S); g.stroke(); g.beginPath(); g.moveTo(0, PZ(sc(s))); g.lineTo(S, PZ(sc(s))); g.stroke(); }
+    for (s=0;s<=N;s++){
+      var seam = (s===2 || s===11 || s===4 || s===9);
+      g.strokeStyle = seam ? 'rgba(63,216,240,0.85)' : 'rgba(63,216,240,0.5)'; g.lineWidth = (seam ? 0.6 : 0.42)*u;
+      g.beginPath(); g.moveTo(PX(sc(s)), 0); g.lineTo(PX(sc(s)), S); g.stroke(); g.beginPath(); g.moveTo(0, PZ(sc(s))); g.lineTo(S, PZ(sc(s))); g.stroke();
+    }
+    for (var a=0;a<=N;a++) for (var b=0;b<=N;b++){
+      g.fillStyle = '#262b3a'; g.beginPath(); g.arc(PX(sc(a)), PZ(sc(b)), 1.25*u, 0, 6.2832); g.fill();
+      g.strokeStyle = 'rgba(63,216,240,0.7)'; g.lineWidth = 0.22*u; g.beginPath(); g.arc(PX(sc(a)), PZ(sc(b)), 0.75*u, 0, 6.2832); g.stroke();
+    }
+    g.fillStyle = '#d8ad55';
+    for (var z = -HALF + 40; z <= HALF - 40; z += 4.4){
+      g.fillRect(PX(HALF - 3.7), PZ(z), 3.3*u, 2.4*u); g.fillRect(PX(-HALF + 0.4), PZ(z), 3.3*u, 2.4*u);
+      g.fillRect(PX(z), PZ(HALF - 3.7), 2.4*u, 3.3*u); g.fillRect(PX(z), PZ(-HALF + 0.4), 2.4*u, 3.3*u);
+    }
+    var mono = '"IBM Plex Mono", ui-monospace, monospace';
+    g.fillStyle = '#9aa3b6'; g.strokeStyle = '#9aa3b6';
+    EMPTY.forEach(function(e){
+      var x0 = PX(bo(e[0])) + 6, z0 = PZ(bo(e[1])) + 6, ww = BLOCK*u - 12;
+      g.setLineDash([8,6]); g.lineWidth = 0.4*u; g.strokeRect(x0, z0, ww, ww); g.setLineDash([]);
+      g.font = '600 ' + Math.round(2.6*u) + 'px ' + mono; g.textAlign='center'; g.textBaseline='middle';
+      g.fillText(e[2], x0 + ww/2, z0 + ww/2 - 1.0*u);
+      g.font = '400 ' + Math.round(1.25*u) + 'px ' + mono; g.fillText('UNPOPULATED', x0 + ww/2, z0 + ww/2 + 1.6*u);
+    });
+    g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = '600 ' + Math.round(1.5*u) + 'px ' + mono;
+    BUILDINGS.forEach(function(b){ g.fillText(b.code + '  ' + b.name.toUpperCase(), PX(bo(b.block[0])) + 0.6*u, PZ(bo(b.block[1])) - 1.2*u); });
+    g.font = '600 ' + Math.round(1.3*u) + 'px ' + mono;
+    g.fillText('J1  PORT N', PX(-HALF + 6), PZ(-HALF + 2)); g.fillText('J3  PORT S', PX(-HALF + 6), PZ(HALF - 2));
+    g.save(); g.translate(PX(HALF - 2), PZ(-HALF + 6)); g.rotate(Math.PI/2); g.fillText('J2  PORT E', 0, 0); g.restore();
+    g.save(); g.translate(PX(-HALF + 2), PZ(-HALF + 6)); g.rotate(Math.PI/2); g.fillText('J4  PORT W', 0, 0); g.restore();
+    g.font = '600 ' + Math.round(3.0*u) + 'px ' + mono; g.fillStyle = 'rgba(154,163,182,0.55)';
+    g.fillText('RESIDENTIAL', PX(bo(4)), PZ(bo(4)) - 1.4*u); g.fillText('COMMERCE', PX(bo(2)), PZ(bo(2)) - 1.4*u); g.fillText('INDUSTRIAL', PX(bo(0)), PZ(bo(0)) - 1.4*u);
+    g.font = '400 ' + Math.round(1.4*u) + 'px ' + mono; g.fillText('ESPERIA  BLOCK 0  REV 0.4  —  INSPECTION STUDY', PX(bo(0)), PZ(HALF - 1.6));
+    var tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 8; return tex;
+  }
+
+  // ---------------- renderer / scene ----------------
+  var canvas = document.getElementById('c'), stage = document.getElementById('stage');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  var scene = new THREE.Scene(); scene.background = new THREE.Color(SKY); scene.fog = new THREE.Fog(SKY, 150, 380);
+  var camera = new THREE.PerspectiveCamera(36, 1, 1, 1200);
+  scene.add(new THREE.HemisphereLight(0x5a6aa8, 0x0c0e16, 0.85)); scene.add(new THREE.AmbientLight(0x2a3150, 0.6));
+  var sun = new THREE.DirectionalLight(0xa9b8ff, 0.55); sun.position.set(-70, 120, 50); sun.castShadow = true;
+  sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150; sun.shadow.camera.near = 20; sun.shadow.camera.far = 360; sun.shadow.bias = -0.0008;
+  scene.add(sun);
+
+  var boardTex = makeBoardTexture();
+  var side = new THREE.MeshLambertMaterial({ color: 0x0b0d14 });
+  var boardMats = [side, side, new THREE.MeshLambertMaterial({ map: boardTex }), side, side, side];
+  var board = new THREE.Mesh(new THREE.BoxGeometry(SIZE, 3, SIZE), boardMats); board.position.y = -1.5; board.receiveShadow = true; scene.add(board);
+
+  var M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), Sc = new THREE.Vector3(), CL = new THREE.Color();
+  var UPV = new THREE.Vector3(0,1,0);
+  var QUATS = [0, Math.PI/2, Math.PI, -Math.PI/2].map(function(a){ return new THREE.Quaternion().setFromAxisAngle(UPV, a); });
+  var HIDE = new THREE.Matrix4().makeScale(0,0,0);
+  var boxGeo = new THREE.BoxGeometry(1,1,1); boxGeo.translate(0,0.5,0);
+  var cylGeo = new THREE.CylinderGeometry(1,1,1,18); cylGeo.translate(0,0.5,0);
+  var planeGeo = new THREE.PlaneGeometry(1,1);
+
+  function boxM(b){ P.set(b[0],b[1],b[2]); Sc.set(b[3],b[4],b[5]); Q.identity(); return M.compose(P,Q,Sc); }
+  function winM(w){ P.set(w[0],w[1],w[2]); Sc.set(w[4],w[5],1); Q.copy(QUATS[w[3]]); return M.compose(P,Q,Sc); }
+  function neonM(n){ P.set(n[0], n[1]-n[4]/2, n[2]); Sc.set(n[3],n[4],n[5]); Q.identity(); return M.compose(P,Q,Sc); }
+  function instanced(geo, mat, list, mfn){
+    var m = new THREE.InstancedMesh(geo, mat, list.length);
+    for (var k=0;k<list.length;k++){ m.setMatrixAt(k, mfn(list[k])); CL.setHex(list[k][6] !== undefined ? list[k][6] : list[k][5]); m.setColorAt(k, CL); }
+    m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; scene.add(m); return m;
+  }
+  var boxMesh = instanced(boxGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), boxes, boxM); boxMesh.castShadow = boxMesh.receiveShadow = true;
+  var cylMesh = instanced(cylGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), cyls, function(c){ P.set(c[0],c[1],c[2]); Sc.set(c[3],c[4],c[3]); Q.identity(); return M.compose(P,Q,Sc); }); cylMesh.castShadow = cylMesh.receiveShadow = true;
+  var winMesh = instanced(planeGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), wins, winM);
+  var neonMesh = instanced(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), neons, neonM);
+
+  // pickable envelopes for named buildings
+  var pickables = [];
+  var pickMat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false });
+  function labelSprite(text, sub){
+    var cv = document.createElement('canvas'); cv.width = 512; cv.height = 128; var g = cv.getContext('2d');
+    g.fillStyle = 'rgba(12,14,24,0.82)'; g.fillRect(0, 0, 512, 128);
+    g.fillStyle = '#3fd8f0'; g.fillRect(0, 0, 8, 128);
+    g.font = '600 44px "Archivo", sans-serif'; g.fillStyle = '#eef2ff'; g.textBaseline = 'middle'; g.fillText(text, 30, 50);
+    g.font = '500 26px "IBM Plex Mono", monospace'; g.fillStyle = '#d8ad55'; g.fillText(sub, 30, 96);
+    var t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.minFilter = THREE.LinearFilter;
+    var s = new THREE.Sprite(new THREE.SpriteMaterial({ map:t, transparent:true, depthTest:false }));
+    s.scale.set(12, 3, 1); return s;
+  }
+  BUILDINGS.forEach(function(b){
+    var e = b.env, m = new THREE.Mesh(new THREE.BoxGeometry(e.w+2, e.h+e.y0, e.d+2), pickMat);
+    m.position.set(e.x, (e.h+e.y0)/2, e.z); m.userData.building = b; scene.add(m); pickables.push(m);
+    // always-on label so it's obvious what can be opened
+    b.label = labelSprite(b.name, b.code + '  ·  click to open'); b.label.position.set(e.x, e.y0 + e.h + 4.5, e.z); scene.add(b.label);
+    var pin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 0.14), new THREE.MeshBasicMaterial({ color:C.cyan })); pin.position.set(e.x, e.y0 + e.h + 1.6, e.z); scene.add(pin);
+    // hover outline
+    b.outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(e.w+0.6, e.h+e.y0+0.3, e.d+0.6)), new THREE.LineBasicMaterial({ color:C.cyan, transparent:true, opacity:0.95 }));
+    b.outline.position.set(e.x, (e.h+e.y0)/2, e.z); b.outline.visible = false; scene.add(b.outline);
+  });
+  var hovered = null;
+  function setHover(b){ if (hovered === b) return; if (hovered) hovered.outline.visible = false; hovered = b; if (b) b.outline.visible = true; }
+
+  // ---------------- data traffic ----------------
+  var MAXP = 160, pulses = [];
+  var pulseMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), MAXP);
+  for (var p=0;p<MAXP;p++){ var dir = pick(DIRS); pulses.push({ kx:irand(0,N), kz:irand(0,N), dx:dir[0], dz:dir[1], t:rng()*PITCH, v:rand(14,24), c: rng()<0.12 ? C.mag : (rng()<0.1 ? C.amber : C.cyan) }); CL.setHex(pulses[p].c); pulseMesh.setColorAt(p, CL); }
+  pulseMesh.instanceColor.needsUpdate = true; scene.add(pulseMesh);
+  function valid(kx,kz){ return kx>=0 && kx<=N && kz>=0 && kz<=N; }
+  function stepPulse(q, dt){
+    q.t += q.v*dt;
+    while (q.t >= PITCH){
+      q.t -= PITCH; q.kx += q.dx; q.kz += q.dz;
+      if (!(rng() < 0.62 && valid(q.kx+q.dx, q.kz+q.dz))){
+        var opts = DIRS.filter(function(d){ return !(d[0]===-q.dx && d[1]===-q.dz) && valid(q.kx+d[0], q.kz+d[1]); });
+        if (!opts.length) opts = [[-q.dx,-q.dz]];
+        var nd = pick(opts); q.dx = nd[0]; q.dz = nd[1];
+      }
+    }
+  }
+  var trafficLevel = 0.6;
+
+  // ---------------- agents: commute ----------------
+  var bodyMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), NA);
+  var headMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), NA);
+  agents.forEach(function(a,k){ CL.setHex(a.skin); bodyMesh.setColorAt(k, CL); CL.setHex(a.visor); headMesh.setColorAt(k, CL); });
+  bodyMesh.instanceColor.needsUpdate = true; headMesh.instanceColor.needsUpdate = true; bodyMesh.castShadow = true;
+  scene.add(bodyMesh); scene.add(headMesh);
+  var selRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 32), new THREE.MeshBasicMaterial({ color:C.cyan, side:THREE.DoubleSide }));
+  selRing.rotation.x = -Math.PI/2; selRing.visible = false; scene.add(selRing);
+
+  function validA(kx,kz){ return kx>=AK0 && kx<=AK1 && kz>=AK0 && kz<=AK1; }
+  function wanderNext(a){
+    var dx = a.next ? a.next[0]-a.node[0] : 0, dz = a.next ? a.next[1]-a.node[1] : 0;
+    var opts = DIRS.filter(function(d){ return !(d[0]===-dx && d[1]===-dz) && validA(a.node[0]+d[0], a.node[1]+d[1]); });
+    if (!opts.length) opts = DIRS.filter(function(d){ return validA(a.node[0]+d[0], a.node[1]+d[1]); });
+    var d = pick(opts); return [a.node[0]+d[0], a.node[1]+d[1]];
+  }
+  function pathNodes(from, to){ var out = [], x = from[0], z = from[1]; while (x !== to[0]){ x += Math.sign(to[0]-x); out.push([x,z]); } while (z !== to[1]){ z += Math.sign(to[1]-z); out.push([x,z]); } return out; }
+  var TOOLLINES = [
+    function(a){ return 'search(<em>"' + pick(['LNG export capacity 2027','grid interconnection queue','battery recycling yield','issuer Q2 filing']) + '"</em>) → ' + irand(3,8) + ' results'; },
+    function(a){ return 'read <em>R' + irand(1,6) + '</em> · ' + irand(3,12) + ',000 chars archived · sha ok'; },
+    function(a){ return 'model call <em>' + a.calls + '/' + a.allowance + '</em> · ' + a.model.split(' · ')[0]; },
+    function(a){ return 'select excerpts <em>S' + irand(1,6) + ', S' + irand(1,6) + '</em> · resolved'; },
+    function(a){ return 'check <em>' + pick(['scope','citations','counterarguments','uncertainty']) + '</em> → ' + (rng()<0.8 ? 'pass' : '<span style="color:var(--mag)">FAIL</span>'); },
+    function(a){ return 'duplicate query suppressed · reused observation'; }
+  ];
+  function dispatch(a){
+    if (!a || a.state !== 'home') return false;
+    a.state = 'commute'; a.wait = 0;
+    a.queue = pathNodes(a.next, a.building.door);
+    a.task = pick(TASKS[a.role] || ['Assigned task']);
+    a.toolTimer = rand(1.5, 3);
+    logEvent(a.building, 'dispatch', '<b>' + esc(a.name) + '</b> dispatched · ' + esc(a.task));
+    return true;
+  }
+  function dispatchOne(){ var home = agents.filter(function(a){ return a.state==='home'; }); if (!home.length) return; dispatch(home[Math.floor(Math.random()*home.length)]); }
+  function stepAgent(a, dt){
+    if (a.state === 'work'){
+      a.timer -= dt; a.toolTimer -= dt;
+      if (a.toolTimer <= 0){
+        a.toolTimer = rand(2, 5);
+        if (rng() < 0.5) a.tools++; else a.calls = Math.min(a.allowance, a.calls + 1);
+        var line = pick(TOOLLINES)(a);
+        logEvent(a.building, 'tool', esc(a.name) + ' · ' + line);
+        floorOnTool(a, line.indexOf('FAIL') >= 0 ? 'fail' : 'tool');
+        if (involves(a)) refreshPanel();
+      }
+      if (a.timer <= 0){
+        var ok = rng() < 0.85;
+        a.state = 'return'; a.building.inside--; if (ok) a.jobs++; else a.blocked++;
+        logEvent(a.building, ok ? 'done' : 'fail', '<b>' + esc(a.name) + '</b> ' + (ok ? 'finished' : 'blocked') + ' · ' + esc(a.task || ''));
+        floorOnTool(a, ok ? 'done' : 'fail'); floorOnLeave(a);
+        a.task = null;
+        a.node = a.building.door.slice(); var path = pathNodes(a.node, a.homeDoor);
+        if (!path.length){ a.state = 'home'; a.next = wanderNext(a); } else { a.next = path.shift(); a.queue = path; }
+        a.t = 0; if (involves(a)) refreshPanel();
+        if (cutBuilding === a.building) buildCutaway(a.building, cutFloor);
+      }
+      return;
+    }
+    if (a.wait > 0){ a.wait -= dt; return; }
+    a.t += a.v*dt;
+    while (a.t >= PITCH){
+      a.t -= PITCH; a.node = a.next;
+      if (a.queue.length){ a.next = a.queue.shift(); continue; }
+      if (a.state === 'commute'){
+        a.state = 'work'; a.timer = rand(12,30); a.building.inside++;
+        logEvent(a.building, 'arrive', '<b>' + esc(a.name) + '</b> at desk · F' + (a.divIdx+1) + ' ' + esc(a.division.name));
+        if (involves(a)) refreshPanel(); if (cutBuilding === a.building) buildCutaway(a.building, cutFloor);
+        floorOnArrive(a);
+        return;
+      }
+      if (a.state === 'return'){ a.state = 'home'; if (involves(a)) refreshPanel(); }
+      a.next = wanderNext(a);
+      if (rng() < 0.18) a.wait = rand(0.8, 3.0);
+    }
+  }
+  function agentPos(a){
+    var dx = a.next[0]-a.node[0], dz = a.next[1]-a.node[1], sw = 1.75*a.side;
+    return [ sc(a.node[0]) + dx*a.t + (dz !== 0 ? sw : 0), sc(a.node[1]) + dz*a.t + (dx !== 0 ? sw : 0) ];
+  }
+
+  // ---------------- cutaway + floor view ----------------
+  var cutGroup = null, cutBuilding = null, cutFloor = null, floorPick = [], agentPick = [];
+  var MAT = {
+    slab:new THREE.MeshLambertMaterial({ color:0x2a3150 }), slabHi:new THREE.MeshLambertMaterial({ color:0x3a4470 }),
+    wall:new THREE.MeshLambertMaterial({ color:0x4a5478, transparent:true, opacity:0.55 }),
+    desk:new THREE.MeshLambertMaterial({ color:0x5c6480 }), deskTop:new THREE.MeshLambertMaterial({ color:0x7d8598 }),
+    chair:new THREE.MeshLambertMaterial({ color:0x3a4058 }), monOn:new THREE.MeshBasicMaterial({ color:C.amber }), monOff:new THREE.MeshLambertMaterial({ color:0x1e2230 }),
+    table:new THREE.MeshLambertMaterial({ color:0x6a6f86 }), pot:new THREE.MeshLambertMaterial({ color:0x3a3340 }), leaf:new THREE.MeshLambertMaterial({ color:0x4f9a6a }),
+    crate:new THREE.MeshLambertMaterial({ color:0x3b4256 }), tag:new THREE.MeshBasicMaterial({ color:0x55607a })
+  };
+  function floorsOf(b){ return Math.max(b.divisions.length, Math.floor(b.env.h/3.4)); }
+  function setRange(b, hide){
+    var r = b.range, k;
+    for (k=r.b0;k<r.b1;k++) boxMesh.setMatrixAt(k, hide ? HIDE : boxM(boxes[k]));
+    for (k=r.w0;k<r.w1;k++) winMesh.setMatrixAt(k, hide ? HIDE : winM(wins[k]));
+    for (k=r.n0;k<r.n1;k++) neonMesh.setMatrixAt(k, hide ? HIDE : neonM(neons[k]));
+    boxMesh.instanceMatrix.needsUpdate = winMesh.instanceMatrix.needsUpdate = neonMesh.instanceMatrix.needsUpdate = true;
+  }
+  function clearCutaway(){ if (!cutGroup) return; scene.remove(cutGroup); setRange(cutBuilding, false); cutGroup = null; cutBuilding = null; cutFloor = null; floorPick = []; agentPick = []; }
+  function mesh(geo, mat, x, y, z, g){ var m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; }
+  function avatar(a, x, y, z, s, g){
+    var body = mesh(new THREE.BoxGeometry(0.5*s, 0.95*s, 0.42*s), new THREE.MeshLambertMaterial({ color:a.skin }), x, y + 0.475*s, z, g);
+    var head = mesh(new THREE.BoxGeometry(0.44*s, 0.36*s, 0.4*s), new THREE.MeshBasicMaterial({ color:a.visor }), x, y + 1.13*s, z, g);
+    body.userData.agent = a; head.userData.agent = a; agentPick.push(body, head);
+    var pick = mesh(new THREE.BoxGeometry(1.2*s, 1.5*s, 1.2*s), pickMat, x, y + 0.75*s, z, g); pick.userData.agent = a; agentPick.push(pick);
+  }
+  function deskSlots(e, n){
+    var cols = Math.max(1, Math.min(n, Math.floor((e.w - 1.6)/3.0))), rows = Math.ceil(n/cols), out = [];
+    var px = cols > 1 ? (e.w - 3.2)/(cols-1) : 0, pz = Math.min(3.0, (e.d - 2.4)/Math.max(rows,1));
+    for (var o=0;o<n;o++) out.push([ e.x - e.w/2 + 1.6 + (o%cols)*px, e.z - e.d/2 + 1.6 + Math.floor(o/cols)*pz ]);
+    return out;
+  }
+  // an office = desk + monitor + chair; the agent sits there when working
+  function office(e, y, slot, a, g, s){
+    var x = slot[0], z = slot[1];
+    mesh(new THREE.BoxGeometry(1.7*s, 0.42*s, 0.8*s), MAT.desk, x, y + 0.21*s, z, g);
+    mesh(new THREE.BoxGeometry(1.8*s, 0.08*s, 0.9*s), MAT.deskTop, x, y + 0.46*s, z, g);
+    var working = a && a.state === 'work';
+    mesh(new THREE.BoxGeometry(0.85*s, 0.5*s, 0.06*s), working ? MAT.monOn : MAT.monOff, x, y + 0.78*s, z - 0.28*s, g);
+    mesh(new THREE.BoxGeometry(0.55*s, 0.5*s, 0.55*s), MAT.chair, x, y + 0.25*s, z + 0.95*s, g);
+    if (working) avatar(a, x, y, z + 0.95*s, s, g);
+    else if (a) mesh(new THREE.BoxGeometry(0.5*s, 0.05*s, 0.3*s), MAT.tag, x, y + 0.51*s, z + 0.2*s, g);   // name plate, occupant away
+  }
+  function floorDetail(b, f, y, fh, g){
+    var e = b.env, dv = b.divisions[f];
+    // low perimeter walls with a door gap on the south side
+    var wh = Math.min(1.2, fh*0.45);
+    mesh(new THREE.BoxGeometry(e.w, wh, 0.12), MAT.wall, e.x, y + wh/2, e.z - e.d/2, g);
+    mesh(new THREE.BoxGeometry(0.12, wh, e.d), MAT.wall, e.x - e.w/2, y + wh/2, e.z, g);
+    mesh(new THREE.BoxGeometry(0.12, wh, e.d), MAT.wall, e.x + e.w/2, y + wh/2, e.z, g);
+    mesh(new THREE.BoxGeometry(e.w*0.5 - 0.8, wh, 0.12), MAT.wall, e.x - e.w*0.25 - 0.4, y + wh/2, e.z + e.d/2, g);
+    mesh(new THREE.BoxGeometry(e.w*0.5 - 0.8, wh, 0.12), MAT.wall, e.x + e.w*0.25 + 0.4, y + wh/2, e.z + e.d/2, g);
+    if (!dv){
+      for (var k=0;k<3;k++) mesh(new THREE.BoxGeometry(1.2, 1.0, 1.2), MAT.crate, e.x - e.w/2 + 1.5 + k*1.4, y + 0.5, e.z - e.d/2 + 1.4, g);
+      return;
+    }
+    deskSlots(e, dv.offices).forEach(function(slot, o){ office(e, y, slot, dv.agents[o], g, 1); });
+    // shared furniture: meeting table and a plant in the far corner
+    mesh(new THREE.BoxGeometry(2.4, 0.5, 1.2), MAT.table, e.x + e.w/2 - 1.9, y + 0.25, e.z + e.d/2 - 1.4, g);
+    mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.5, 10), MAT.pot, e.x - e.w/2 + 0.7, y + 0.25, e.z + e.d/2 - 0.8, g);
+    mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), MAT.leaf, e.x - e.w/2 + 0.7, y + 0.85, e.z + e.d/2 - 0.8, g);
+  }
+  function buildCutaway(b, detail){
+    clearCutaway();
+    setRange(b, true);
+    var e = b.env, g = new THREE.Group(), floors = floorsOf(b), fh = e.h/floors;
+    for (var f=0;f<floors;f++){
+      if (detail != null && f > detail) break;
+      var y = e.y0 + f*fh;
+      var slab = new THREE.Mesh(new THREE.BoxGeometry(e.w, 0.16, e.d), detail === f ? MAT.slabHi : MAT.slab);
+      slab.position.set(e.x, y, e.z); slab.userData.floor = f; slab.userData.building = b; g.add(slab); floorPick.push(slab);
+      if (detail === f){ floorDetail(b, f, y + 0.08, fh, g); continue; }
+      if (detail != null) continue;                       // floors under the open one stay bare
+      var dv = b.divisions[f]; if (!dv) continue;
+      deskSlots(e, dv.offices).forEach(function(slot, o){ office(e, y + 0.08, slot, dv.agents[o], g, Math.min(1, fh/3.6)); });
+    }
+    var sh = detail != null ? (detail+1)*fh : e.h;
+    var shell = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(e.w, sh, e.d)), new THREE.LineBasicMaterial({ color:C.cyan, transparent:true, opacity:0.6 }));
+    shell.position.set(e.x, e.y0 + sh/2, e.z); g.add(shell);
+    scene.add(g); cutGroup = g; cutBuilding = b; cutFloor = detail == null ? null : detail;
+  }
+
+  // ================= floor scene: original top-down pixel room =================
+  var fc = document.getElementById('fc'), fctx = fc.getContext('2d');
+  var T = 16, FL = null, floorMode = false;
+  function floorCtx(){ if (view.kind === 'floor') return view; if (view.kind === 'agent' && view.from.kind === 'floor') return view.from; return null; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function css(hex){ return '#' + ('000000' + hex.toString(16)).slice(-6); }
+  function shade(hex, k){ var r=(hex>>16)&255, g=(hex>>8)&255, b=hex&255; return css(((clamp(Math.round(r*k),0,255))<<16)|((clamp(Math.round(g*k),0,255))<<8)|clamp(Math.round(b*k),0,255)); }
+  var STYLE = {
+    u1:{ floor:[0x3a3d4c,0x3f4251], line:0x33364a, wallTop:0x4b5170, wallFace:0x6a7194, name:'civic' },
+    u2:{ floor:[0x4a3b2f,0x513f31], line:0x3d3027, wallTop:0x3e3128, wallFace:0x5c493a, name:'library' },
+    u3:{ floor:[0x2a2f45,0x2e3349], line:0x252a3e, wallTop:0x3c4256, wallFace:0x5a6078, name:'office' },
+    t1:{ floor:[0x2b2a3f,0x302e45], line:0x262538, wallTop:0x3e3856, wallFace:0x5c5480, name:'office' },
+    t2:{ floor:[0x293440,0x2d3845], line:0x232d38, wallTop:0x3a4a56, wallFace:0x55687a, name:'office' },
+    t3:{ floor:[0x33303f,0x373445], line:0x2c2938, wallTop:0x4a4258, wallFace:0x6a5f7e, name:'office' },
+    t4:{ floor:[0x2f3538,0x33393c], line:0x282d30, wallTop:0x3e4649, wallFace:0x5b6568, name:'industrial' }
+  };
+  var DIRS4 = [[0,1],[0,-1],[-1,0],[1,0]];
+
+  function layoutFloor(b, f){
+    var e = b.env, dv = b.divisions[f];
+    var cols = clamp(Math.round(e.w*1.6), 15, 26), rows = clamp(Math.round(e.d*1.6), 13, 20);
+    var walk = [], r, c;
+    for (r=0;r<rows;r++){ walk.push([]); for (c=0;c<cols;c++) walk[r].push(r>0 && r<rows-1 && c>0 && c<cols-1); }
+    var L = { b:b, f:f, dv:dv, cols:cols, rows:rows, walk:walk, furn:[], desks:[], pois:[], style:STYLE[b.id], agents:[], leds:[] };
+    function block(c,r,w,h){ for (var yy=r; yy<r+h; yy++) for (var xx=c; xx<c+w; xx++) if (walk[yy]) walk[yy][xx] = false; }
+    function put(type,c,r,w,h,extra){ var o = { type:type, c:c, r:r, w:w||1, h:h||1 }; if (extra) for (var k in extra) o[k] = extra[k]; L.furn.push(o); block(c,r,o.w,o.h); return o; }
+    // door: two tiles in the south wall, a mat inside
+    L.door = { c: Math.floor(cols/2) - 1, r: rows-1 };
+    walk[rows-1][L.door.c] = walk[rows-1][L.door.c+1] = true;
+    L.furn.push({ type:'mat', c:L.door.c, r:rows-2, w:2, h:1 });
+    if (!dv){
+      for (var k=0;k<7;k++) put('crate', 2 + (k%4)*2, 2 + Math.floor(k/4)*2, 1, 1);
+      put('rack', cols-2, 2, 1, 2); put('rack', cols-2, 4, 1, 2);
+      return L;
+    }
+    // desks in rows: desk 2x1 with the chair below it
+    var deskCols = Math.max(1, Math.floor((cols - 6)/3)), n = dv.offices;
+    for (var o=0;o<n;o++){
+      var dc = 2 + (o % deskCols)*3, dr = 3 + Math.floor(o/deskCols)*3;
+      if (dr + 1 >= rows-2) break;
+      var d = put('desk', dc, dr, 2, 1, { slot:o, mug: rng()<0.5, paper: rng()<0.5 });
+      var chair = { c:dc, r:dr+1 }; block(chair.c, chair.r, 1, 1);
+      L.desks.push({ c:dc, r:dr, chair:chair, slot:o, agent:dv.agents[o] || null });
+    }
+    // fixtures by division type
+    var wb = put('whiteboard', 2, 0, 3, 1); L.pois.push({ c:3, r:1, kind:'board' });
+    var isLib = b.id === 'u2';
+    if (isLib){ put('shelf', 6, 0, 2, 1); put('shelf', 9, 0, 2, 1); put('shelf', 0, 3, 1, 2); put('shelf', 0, 6, 1, 2); L.pois.push({ c:7, r:1, kind:'shelf' }); }
+    else { put('rack', cols-2, 2, 1, 2); put('rack', cols-2, 4, 1, 2); L.pois.push({ c:cols-3, r:3, kind:'rack' }); }
+    put('plant', 1, rows-2, 1, 1); put('plant', cols-2, rows-2, 1, 1);
+    put('cooler', cols-2, rows-4, 1, 1); L.pois.push({ c:cols-3, r:rows-4, kind:'cooler' });
+    put('table', cols-4, rows-3, 1, 1); put('seat', cols-5, rows-3, 1, 1); put('seat', cols-3, rows-3, 1, 1);
+    L.pois.push({ c:cols-4, r:rows-4, kind:'coffee' });
+    put('printer', 1, 2, 1, 1);
+    return L;
+  }
+
+  // ---- static layer: floor, walls, furniture ----
+  function paintStatic(L){
+    var W = L.cols*T, H = L.rows*T, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var g = cv.getContext('2d'), s = L.style, r, c;
+    for (r=0;r<L.rows;r++) for (c=0;c<L.cols;c++){
+      var x = c*T, y = r*T, wall = r===0 || r===L.rows-1 || c===0 || c===L.cols-1;
+      if (wall && !(r===L.rows-1 && (c===L.door.c || c===L.door.c+1))){
+        g.fillStyle = shade(s.wallTop, 1.3); g.fillRect(x, y, T, T);
+        if (r===0){ g.fillStyle = shade(s.wallFace, 1.3); g.fillRect(x, y+5, T, T-5); g.fillStyle = shade(s.wallFace, 0.8); g.fillRect(x, y+T-2, T, 2); }
+        else { g.fillStyle = shade(s.wallTop, 1.7); g.fillRect(x, y, T, 2); }
+        continue;
+      }
+      g.fillStyle = shade(s.floor[(r+c)&1], 1.35); g.fillRect(x, y, T, T);
+      g.fillStyle = shade(s.line, 1.2); g.fillRect(x+T-1, y, 1, T); g.fillRect(x, y+T-1, T, 1);
+      if (s.name === 'library'){ g.fillStyle = shade(s.floor[0], 0.85); g.fillRect(x, y+7, T, 1); }
+      if (s.name === 'civic' && ((r*7+c*3)%5)===0){ g.fillStyle = shade(s.floor[1], 1.12); g.fillRect(x+4, y+6, 3, 1); }
+    }
+    L.furn.forEach(function(o){
+      var x = o.c*T, y = o.r*T;
+      switch (o.type){
+        case 'mat': g.fillStyle = '#5a4634'; g.fillRect(x+2, y+3, 2*T-4, T-6); g.fillStyle = '#7a5f45'; g.fillRect(x+4, y+5, 2*T-8, T-10); break;
+        case 'desk':
+          g.fillStyle = '#4b5168'; g.fillRect(x+1, y+5, 2*T-2, T-4);
+          g.fillStyle = '#6b7288'; g.fillRect(x+1, y+3, 2*T-2, T-7);
+          g.fillStyle = '#20232f'; g.fillRect(x+4, y+2, 8, 6); g.fillRect(x+7, y+8, 2, 2);        // monitor body + stand
+          g.fillStyle = '#3a4058'; g.fillRect(x+16, y+9, 8, 3);                                   // keyboard
+          if (o.mug){ g.fillStyle = '#d8ad55'; g.fillRect(x+26, y+5, 3, 3); }
+          if (o.paper){ g.fillStyle = '#e6e9f2'; g.fillRect(x+19, y+4, 6, 4); g.fillStyle = '#9aa3b6'; g.fillRect(x+20, y+5, 4, 1); }
+          o.screen = { x:x+5, y:y+3 };
+          break;
+        case 'whiteboard': g.fillStyle = '#e6e9f2'; g.fillRect(x+3, y+6, 3*T-6, 8); g.fillStyle = '#3fd8f0'; g.fillRect(x+6, y+8, 12, 1); g.fillRect(x+6, y+10, 8, 1); g.fillStyle = '#ff5fd2'; g.fillRect(x+22, y+8, 6, 1); g.fillRect(x+22, y+11, 10, 1); break;
+        case 'shelf':
+          g.fillStyle = '#3b2e24'; g.fillRect(x+1, y+(o.r===0?5:1), o.w*T-2, o.h*T-(o.r===0?6:2));
+          for (var k=0;k<o.w*o.h*5;k++){ g.fillStyle = ['#c9505a','#3fa2c9','#d8ad55','#7dffb0','#8a7cc9'][k%5]; var bx = x+3+(k%(o.w*5))*3, by = y+(o.r===0?7:3)+Math.floor(k/(o.w*5))*7; g.fillRect(bx, by, 2, 5); }
+          break;
+        case 'rack':
+          g.fillStyle = '#14161f'; g.fillRect(x+2, y+1, T-4, 2*T-2); g.fillStyle = '#2a2f3e'; g.fillRect(x+3, y+2, T-6, 2*T-4);
+          for (var u=0;u<7;u++){ g.fillStyle = '#1e2230'; g.fillRect(x+4, y+3+u*4, T-8, 3); L.leds.push({ x:x+5, y:y+4+u*4, c: u%3===0 ? '#7dffb0' : '#3fd8f0', ph: rng()*6 }); }
+          break;
+        case 'plant': g.fillStyle = '#6b4a2f'; g.fillRect(x+5, y+9, 6, 5); g.fillStyle = '#4f9a6a'; g.fillRect(x+3, y+3, 4, 4); g.fillRect(x+8, y+2, 5, 5); g.fillRect(x+5, y+6, 6, 3); g.fillStyle = '#6fc48a'; g.fillRect(x+9, y+3, 2, 2); break;
+        case 'cooler': g.fillStyle = '#c7cde0'; g.fillRect(x+5, y+7, 6, 8); g.fillStyle = '#3fa2c9'; g.fillRect(x+4, y+1, 8, 6); g.fillStyle = '#8ad4ee'; g.fillRect(x+5, y+2, 2, 3); break;
+        case 'table': g.fillStyle = '#5c6480'; g.fillRect(x+2, y+3, T-4, T-6); g.fillStyle = '#7d8598'; g.fillRect(x+3, y+2, T-6, T-8); g.fillStyle = '#d8ad55'; g.fillRect(x+6, y+5, 3, 3); break;
+        case 'seat': g.fillStyle = '#3a4058'; g.fillRect(x+4, y+4, 8, 8); g.fillStyle = '#4a5270'; g.fillRect(x+5, y+5, 6, 3); break;
+        case 'printer': g.fillStyle = '#9aa3b6'; g.fillRect(x+2, y+4, T-4, 9); g.fillStyle = '#e6e9f2'; g.fillRect(x+4, y+2, 8, 3); g.fillStyle = '#7dffb0'; g.fillRect(x+11, y+6, 2, 1); break;
+        case 'crate': g.fillStyle = '#3b4256'; g.fillRect(x+2, y+2, T-4, T-4); g.fillStyle = '#4c5470'; g.fillRect(x+3, y+3, T-6, 2); g.fillStyle = '#2c3348'; g.fillRect(x+2, y+8, T-4, 1); break;
+      }
+    });
+    // chairs
+    L.desks.forEach(function(d){ var x = d.chair.c*T, y = d.chair.r*T; g.fillStyle = '#2c3348'; g.fillRect(x+4, y+3, 8, 9); g.fillStyle = '#3a4058'; g.fillRect(x+5, y+4, 6, 6); });
+    return cv;
+  }
+
+  // ---- pathfinding on the tile grid ----
+  function bfs(L, from, to){
+    var key = function(c,r){ return r*L.cols+c; }, prev = {}, q = [[from.c, from.r]], seen = {}; seen[key(from.c,from.r)] = true;
+    while (q.length){
+      var cur = q.shift(); if (cur[0]===to.c && cur[1]===to.r) break;
+      for (var i=0;i<4;i++){
+        var nc = cur[0]+DIRS4[i][0], nr = cur[1]+DIRS4[i][1];
+        if (nr<0||nr>=L.rows||nc<0||nc>=L.cols) continue;
+        var ok = L.walk[nr][nc] || (nc===to.c && nr===to.r);
+        if (!ok || seen[key(nc,nr)]) continue;
+        seen[key(nc,nr)] = true; prev[key(nc,nr)] = cur; q.push([nc,nr]);
+      }
+    }
+    if (!seen[key(to.c,to.r)]) return null;
+    var path = [], p = [to.c, to.r];
+    while (!(p[0]===from.c && p[1]===from.r)){ path.unshift({ c:p[0], r:p[1] }); p = prev[key(p[0],p[1])]; }
+    return path;
+  }
+  function deskOf(L, a){ for (var i=0;i<L.desks.length;i++) if (L.desks[i].agent === a) return L.desks[i]; return null; }
+  function spawnAgent(L, a, atDoor){
+    var d = deskOf(L, a); if (!d) return;
+    var fa = { a:a, desk:d, c: atDoor ? L.door.c : d.chair.c, r: atDoor ? L.door.r : d.chair.r, x:0, y:0, path:[], mode:'sit', face:1, anim:0, timer: rand(3,9), bubble:null, leaving:false };
+    fa.x = fa.c*T + T/2; fa.y = fa.r*T + T - 2;
+    if (atDoor){ fa.mode = 'walk'; fa.path = bfs(L, {c:fa.c,r:fa.r}, d.chair) || []; fa.face = 1; }
+    L.agents.push(fa);
+  }
+  function walkTo(L, fa, tile){ var p = bfs(L, {c:fa.c, r:fa.r}, tile); if (p && p.length){ fa.path = p; fa.mode = 'walk'; return true; } return false; }
+  function stepFloorAgent(L, fa, dt){
+    fa.anim += dt;
+    if (fa.bubble){ fa.bubble.t -= dt; if (fa.bubble.t <= 0) fa.bubble = null; }
+    if (fa.mode === 'walk'){
+      if (!fa.path.length){ fa.mode = (fa.c===fa.desk.chair.c && fa.r===fa.desk.chair.r) ? 'sit' : 'stand'; fa.timer = fa.mode==='sit' ? rand(6,16) : rand(2,5); if (fa.mode==='sit') fa.face = 1; return; }
+      var nx = fa.path[0].c*T + T/2, ny = fa.path[0].r*T + T - 2, dx = nx - fa.x, dy = ny - fa.y, dist = Math.hypot(dx,dy), sp = 44*dt;
+      fa.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1);
+      if (dist <= sp){ fa.x = nx; fa.y = ny; fa.c = fa.path[0].c; fa.r = fa.path[0].r; fa.path.shift(); }
+      else { fa.x += dx/dist*sp; fa.y += dy/dist*sp; }
+      return;
+    }
+    fa.timer -= dt;
+    if (fa.timer > 0) return;
+    if (fa.leaving) return;
+    if (fa.mode === 'sit'){
+      if (rng() < 0.45 && L.pois.length){ var poi = pick(L.pois); if (walkTo(L, fa, poi)) { fa.poi = poi; return; } }
+      fa.timer = rand(4,10);
+    } else {                                                     // standing at a point of interest → chat or go back
+      var mate = L.agents.filter(function(o){ return o !== fa && o.mode === 'stand' && Math.abs(o.c-fa.c)+Math.abs(o.r-fa.r) <= 2; })[0];
+      if (mate && rng() < 0.5){ fa.bubble = { kind:'chat', t:1.6 }; mate.bubble = { kind:'chat', t:1.6 }; fa.timer = 2.2; return; }
+      walkTo(L, fa, fa.desk.chair); fa.face = 1;
+    }
+  }
+  function floorOnArrive(a){ var ctx = floorCtx(); if (!FL || !ctx || ctx.b !== a.building || a.divIdx !== ctx.f) return; if (!FL.agents.some(function(o){ return o.a === a; })) spawnAgent(FL, a, true); }
+  function floorOnLeave(a){ if (!FL) return; var fa = FL.agents.filter(function(o){ return o.a === a; })[0]; if (!fa) return; fa.leaving = true; walkTo(FL, fa, { c:FL.door.c, r:FL.door.r }); }
+  function floorOnTool(a, kind){ if (!FL) return; var fa = FL.agents.filter(function(o){ return o.a === a; })[0]; if (fa) fa.bubble = { kind:kind, t:1.4 }; }
+
+  function buildFloorScene(b, f){
+    FL = layoutFloor(b, f); FL.static = paintStatic(FL);
+    if (FL.dv) FL.dv.agents.forEach(function(a){ if (a && a.state === 'work') spawnAgent(FL, a, false); });
+    FL.buf = document.createElement('canvas'); FL.buf.width = FL.cols*T; FL.buf.height = FL.rows*T; FL.g = FL.buf.getContext('2d');
+  }
+  function setFloorMode(on){
+    if (floorMode === on) return;
+    floorMode = on; document.getElementById('app').classList.toggle('floormode', on);
+    if (!on) FL = null;
+    resize();
+  }
+
+  // ---- avatar sprite: original chunky pixel figure ----
+  function drawAvatar(g, fa, t){
+    var a = fa.a, x = Math.round(fa.x), y = Math.round(fa.y), walking = fa.mode === 'walk', fr = walking ? (Math.floor(fa.anim*8)&1) : 0;
+    var skin = css(a.skin), shirt = css(a.visor), dark = shade(a.visor, 0.6), hair = '#2b2230';
+    // legs
+    g.fillStyle = '#1c1f2c'; g.fillRect(x-3, y-3 - (fr?1:0), 2, 3); g.fillRect(x+1, y-3 - (fr?0:1), 2, 3);
+    // body + arms
+    g.fillStyle = shirt; g.fillRect(x-4, y-9, 8, 6);
+    g.fillStyle = dark; var arm = (fa.mode==='sit' && (Math.floor(t*6)&1)) ? 1 : 0; g.fillRect(x-6, y-9+arm, 2, 4); g.fillRect(x+4, y-9-arm+ (arm?0:0), 2, 4);
+    // head
+    g.fillStyle = skin; g.fillRect(x-4, y-16, 8, 7);
+    g.fillStyle = hair;
+    if (fa.face === 1){ g.fillRect(x-4, y-16, 8, 5); }                                   // back of head
+    else { g.fillRect(x-4, y-16, 8, 2); if (fa.face === 2) g.fillRect(x-4, y-14, 2, 3); if (fa.face === 3) g.fillRect(x+2, y-14, 2, 3); }
+    if (fa.face === 0){ g.fillStyle = '#1c1f2c'; g.fillRect(x-2, y-12, 1, 1); g.fillRect(x+1, y-12, 1, 1); g.fillStyle = shirt; g.fillRect(x-3, y-13, 6, 1); }
+    if (fa.face === 2){ g.fillStyle = '#1c1f2c'; g.fillRect(x-2, y-12, 1, 1); }
+    if (fa.face === 3){ g.fillStyle = '#1c1f2c'; g.fillRect(x+1, y-12, 1, 1); }
+    // bubble
+    if (fa.bubble){
+      var bx = x+3, by = y-25, col = { chat:'#e6e9f2', tool:'#3fd8f0', done:'#ffb45c', fail:'#ff5fd2', arrive:'#7dffb0' }[fa.bubble.kind] || '#e6e9f2';
+      g.fillStyle = '#e6e9f2'; g.fillRect(bx, by, 11, 8); g.fillRect(bx+1, by+8, 2, 2);
+      g.fillStyle = fa.bubble.kind === 'chat' ? '#5d6579' : col;
+      if (fa.bubble.kind === 'chat'){ g.fillRect(bx+2, by+3, 2, 2); g.fillRect(bx+5, by+3, 2, 2); g.fillRect(bx+8, by+3, 2, 2); }
+      else g.fillRect(bx+3, by+2, 5, 4);
+    }
+    fa.box = { x:x-6, y:y-17, w:12, h:18 };
+  }
+  function paintFloor(dt, t){
+    var L = FL; if (!L) return;
+    var g = L.g, W = L.buf.width, H = L.buf.height;
+    g.drawImage(L.static, 0, 0);
+    // live monitors
+    L.desks.forEach(function(d){ var o = L.furn.filter(function(f){ return f.type==='desk' && f.slot===d.slot; })[0]; if (!o || !o.screen) return;
+      var on = d.agent && d.agent.state === 'work'; g.fillStyle = on ? (Math.floor(t*3)&1 ? '#ffb45c' : '#ffc86b') : '#2c3348'; g.fillRect(o.screen.x, o.screen.y, 6, 4); });
+    // rack LEDs
+    L.leds.forEach(function(l){ g.fillStyle = (Math.sin(t*5 + l.ph) > 0.3) ? l.c : '#1e2230'; g.fillRect(l.x, l.y, 2, 1); });
+    // agents
+    for (var i=L.agents.length-1;i>=0;i--){ var fa = L.agents[i]; if (!REDUCED) stepFloorAgent(L, fa, dt); if (fa.leaving && !fa.path.length && fa.r === L.door.r) L.agents.splice(i,1); }
+    L.agents.slice().sort(function(p,q){ return p.y - q.y; }).forEach(function(fa){ drawAvatar(g, fa, t); });
+    // blit, integer-scaled and centred
+    var sw = fc.width, sh = fc.height, fit = Math.min(sw/W, (sh-40)/H) * 0.96, sc2 = fit >= 2 ? Math.floor(fit) : Math.max(0.5, fit);
+    fctx.imageSmoothingEnabled = false;
+    fctx.fillStyle = '#0d0f17'; fctx.fillRect(0, 0, sw, sh);
+    L.blit = { x: Math.floor((sw - W*sc2)/2), y: Math.floor((sh - H*sc2)/2), s: sc2 };
+    fctx.drawImage(L.buf, L.blit.x, L.blit.y, W*sc2, H*sc2);
+    // caption
+    fctx.fillStyle = '#8e97ad'; fctx.font = '500 ' + Math.round(11*(fc.width/(stage.clientWidth||1))) + 'px "IBM Plex Mono", monospace';
+    fctx.fillText((L.b.code + '  ·  F' + (L.f+1) + '  ·  ' + (L.dv ? L.dv.name : 'unassigned')).toUpperCase(), L.blit.x, L.blit.y - 8);
+  }
+  function pickFloor(cx, cy){
+    var L = FL; if (!L || !L.blit) return null;
+    var rect = fc.getBoundingClientRect(), px = (cx - rect.left) * (fc.width/rect.width), py = (cy - rect.top) * (fc.height/rect.height);
+    var bx = (px - L.blit.x)/L.blit.s, by = (py - L.blit.y)/L.blit.s, hit = null;
+    L.agents.forEach(function(fa){ var b = fa.box; if (b && bx>=b.x && bx<=b.x+b.w && by>=b.y && by<=b.y+b.h) hit = fa.a; });
+    return hit;
+  }
+
+  // ---------------- views: overview → building → floor → agent ----------------
+  var view = { kind:'overview' }, selected = null, follow = false;
+  var overviewEl = document.getElementById('overview'), inspectEl = document.getElementById('inspect'), bodyEl = document.getElementById('inspectBody'), backEl = document.getElementById('back');
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function stateLabel(s){ return {home:'At home', commute:'Commuting', work:'Working', 'return':'Heading home'}[s]; }
+  function chip(a){ return a ? '<button class="chip '+a.state+'" data-agent="'+a.id+'"><span class="dot"></span>'+esc(a.name)+'</button>' : '<span class="chip vacant">vacant</span>'; }
+  function involves(a){ return (view.kind==='agent' && view.a===a) || view.b === a.building; }
+  function renderBuilding(b){
+    var assigned = 0, offices = 0; b.divisions.forEach(function(d){ offices += d.offices; d.agents.forEach(function(a){ if (a) assigned++; }); });
+    var floors = floorsOf(b), html = '';
+    for (var f=floors-1; f>=0; f--){
+      var d = b.divisions[f];
+      if (!d){ html += '<div class="floor empty" data-floor="'+f+'" role="button" tabindex="0"><span class="fno">F'+(f+1)+'</span><b>Unassigned floor <span class="open">open ↗</span></b></div>'; continue; }
+      var chips = ''; for (var o=0;o<d.offices;o++) chips += chip(d.agents[o]);
+      html += '<div class="floor" data-floor="'+f+'" role="button" tabindex="0"><span class="fno">F'+(f+1)+'</span><span><b>'+esc(d.name)+' <span class="open">open ↗</span></b><div class="chips">'+chips+'</div></span></div>';
+    }
+    return '<div class="eyebrow">Building · '+b.code+' · '+b.ring+' ring</div><h1>'+esc(b.name)+'</h1><p>'+esc(b.purpose)+'</p>'
+      + '<div class="kv"><div><i>Inside now</i><b>'+b.inside+'</b></div><div><i>Assigned</i><b>'+assigned+' / '+offices+'</b></div><div><i>Floors</i><b>'+floors+'</b></div><div><i>Divisions</i><b>'+b.divisions.length+'</b></div></div>'
+      + '<h2 style="margin-top:16px">Floors · click one to walk in</h2><div class="floors">'+html+'</div>'
+      + '<p class="note">Floors are divisions; desks are offices. A lit monitor and a seated avatar mean the agent is working there now. A name plate means assigned but away.</p>';
+  }
+  function renderFloor(b, f){
+    var d = b.divisions[f], p = b.project;
+    var present = 0, assigned = 0, calls = 0, allow = 0, tools = 0, jobs = 0, blocked = 0, rows = '';
+    if (d) for (var o=0;o<d.offices;o++){
+      var a = d.agents[o];
+      if (!a){ rows += '<tr><td class="tk" colspan="4" style="color:var(--line)">desk '+(o+1)+' · vacant</td></tr>'; continue; }
+      assigned++; calls += a.calls; allow += a.allowance; tools += a.tools; jobs += a.jobs; blocked += a.blocked;
+      if (a.state === 'work') present++;
+      rows += '<tr><td><button class="nm" data-agent="'+a.id+'">'+esc(a.name)+'</button><br><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span></td>'
+        + '<td class="tk">'+(a.task ? esc(a.task) : '<span style="opacity:.5">—</span>')+'</td>'
+        + '<td class="num">'+a.calls+'/'+a.allowance+'</td><td class="num">'+esc(a.model.split(' · ')[0])+'</td></tr>';
+    }
+    var lines = LOG.filter(function(l){ return l.b === b; }).slice(-14).reverse().map(function(l){ return '<li class="'+l.kind+'"><span class="ts">'+l.t+'</span><span>'+l.html+'</span></li>'; }).join('');
+    return '<div class="fhead"><div class="grow"><div class="eyebrow">'+esc(b.name)+' · '+b.code+' · Floor F'+(f+1)+' of '+floorsOf(b)+'</div>'
+      + '<h1>'+(d ? esc(d.name) : 'Unassigned floor')+'</h1>'
+      + (d ? '<p>'+esc(d.role)+' desks · '+b.ring+' ring · top-down plan on the left, scroll to zoom</p>' : '<p>No division lives here yet. Storage until the mayor proposes one and you approve it.</p>')
+      + '</div></div>'
+      + '<div class="tiles">'
+      + '<div><i>At desk now</i><b>'+present+' <small>/ '+(d ? d.offices : 0)+'</small></b></div>'
+      + '<div><i>Assigned</i><b>'+assigned+'</b></div>'
+      + '<div><i>Calls used</i><b>'+calls+' <small>/ '+allow+'</small></b></div>'
+      + '<div><i>Tool calls</i><b>'+tools+'</b></div>'
+      + '<div><i>Jobs done</i><b>'+jobs+'</b></div>'
+      + '<div><i>Blocked</i><b style="color:'+(blocked?'var(--mag)':'inherit')+'">'+blocked+'</b></div>'
+      + '</div>'
+      + '<div class="grid2">'
+      + '<section class="card proj"><h2>Current project</h2><div class="title">'+esc(p.title)+'</div><div class="meta">'
+      + '<span>job</span><span class="mono">'+esc(p.job)+'</span><span>stage</span><span>'+esc(p.stage)+'</span><span>backend</span><span>'+esc(p.backend)+'</span><span>budget</span><span>'+esc(p.budget)+'</span><span>since</span><span>'+esc(p.since)+'</span></div></section>'
+      + '<section class="card"><h2>Who sits here</h2>'+(d ? '<table class="roster"><tbody>'+rows+'</tbody></table>' : '<p>Nobody. Crates.</p>')+'</section>'
+      + '<section class="card span2"><h2>Activity · '+esc(b.name)+'</h2>'+(lines ? '<ul class="log">'+lines+'</ul>' : '<p>Quiet. Dispatch a job from the city view and watch this fill.</p>')+'</section>'
+      + '</div>'
+      + '<p class="note">Everything here maps to a ledger field: calls and tool calls come from <b>tool-calls.sqlite</b>, stage from the job journal, blocked from review verdicts. The room shape is square until the architecture agents exist.</p>';
+  }
+  function renderAgent(a){
+    var b = a.building;
+    return '<div class="eyebrow">Agent · '+a.code+'</div><h1>'+esc(a.name)+'</h1><p>'+esc(a.role)+' · <button class="chip" data-building="'+b.id+'">'+esc(b.name)+'</button> · <button class="chip" data-gofloor="'+a.divIdx+'">F'+(a.divIdx+1)+' '+esc(a.division.name)+'</button> · desk '+(a.office+1)+'</p>'
+      + '<div style="margin-bottom:12px"><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span></div>'
+      + (a.task ? '<div class="task">'+esc(a.task)+'</div>' : '<p class="note">No assigned task. Home block '+a.home[0]+','+a.home[1]+'.</p>')
+      + '<div class="kv" style="margin-top:12px"><div><i>Model this run</i><b style="font-size:11.5px" class="mono">'+esc(a.model)+'</b></div><div><i>Calls used</i><b>'+a.calls+' / '+a.allowance+'</b></div><div><i>Tool calls</i><b>'+a.tools+'</b></div><div><i>Jobs done</i><b>'+a.jobs+'</b></div><div><i>Blocked</i><b>'+a.blocked+'</b></div><div><i>Identity</i><b style="font-size:11.5px">stable across models</b></div></div>'
+      + '<div class="row" style="margin-top:12px"><button class="btn primary" id="dispatchSel" '+(a.state!=='home'?'disabled':'')+'>Dispatch to work</button><label class="tog"><input type="checkbox" id="followSel" '+(follow?'checked':'')+'> Follow</label></div>'
+      + '<p class="note">Identity, history and permissions belong to the agent. The model is per run.</p>';
+  }
+  function refreshPanel(){
+    if (view.kind === 'overview'){ overviewEl.hidden = false; inspectEl.hidden = true; return; }
+    overviewEl.hidden = true; inspectEl.hidden = false;
+    if (view.kind === 'building'){ backEl.textContent = '← City'; bodyEl.innerHTML = renderBuilding(view.b); }
+    else if (view.kind === 'floor'){ backEl.textContent = '← All floors'; bodyEl.innerHTML = renderFloor(view.b, view.f); }
+    else { backEl.textContent = view.from.kind === 'floor' ? '← Back to floor' : (view.from.kind === 'building' ? '← Back to building' : '← City'); bodyEl.innerHTML = renderAgent(view.a); }
+  }
+  function selectBuilding(b){
+    view = { kind:'building', b:b }; selected = null; follow = false; selRing.visible = false;
+    setFloorMode(false);
+    buildCutaway(b, null);
+    target.set(b.env.x, b.env.y0 + b.env.h*0.35, b.env.z); want.r = Math.max(60, b.env.h*2.2); want.ph = 0.86;
+    refreshPanel();
+  }
+  function selectFloor(b, f){
+    view = { kind:'floor', b:b, f:f }; selected = null; follow = false; selRing.visible = false;
+    if (cutBuilding !== b || cutFloor !== null) buildCutaway(b, null);   // city keeps the whole stack for when we come back
+    setFloorMode(true); buildFloorScene(b, f);
+    refreshPanel();
+  }
+  function selectAgent(a, from){
+    from = from || view; if (from.kind === 'agent') from = from.from;
+    view = { kind:'agent', a:a, from:from }; selected = a;
+    if (from.kind === 'overview'){ setFloorMode(false); clearCutaway(); follow = true; want.r = Math.min(want.r, 70); }
+    else if (from.kind === 'building'){ setFloorMode(false); follow = false; }
+    else follow = false;                                              // from a floor: stay in the floor scene
+    selRing.visible = a.state !== 'work';
+    refreshPanel();
+  }
+  function deselect(){ view = { kind:'overview' }; selected = null; follow = false; selRing.visible = false; setFloorMode(false); clearCutaway(); refreshPanel(); }
+  function back(){
+    if (view.kind === 'agent'){ var f = view.from; if (f.kind === 'floor') selectFloor(f.b, f.f); else if (f.kind === 'building') selectBuilding(f.b); else deselect(); }
+    else if (view.kind === 'floor') selectBuilding(view.b);
+    else deselect();
+  }
+  backEl.addEventListener('click', back);
+  window.__esperia = { selectBuilding:selectBuilding, selectFloor:selectFloor, selectAgent:selectAgent, back:back, buildings:BUILDINGS, agents:agents, dispatch:dispatchOne, state:function(){ return { view:view.kind, floorMode:floorMode, FL:!!FL, agentsOnFloor: FL ? FL.agents.length : 0 }; } };
+  bodyEl.addEventListener('click', function(e){
+    var t = e.target.closest('[data-agent]'); if (t){ selectAgent(agents[+t.getAttribute('data-agent')]); return; }
+    t = e.target.closest('[data-gofloor]'); if (t){ selectFloor(view.a.building, +t.getAttribute('data-gofloor')); return; }
+    t = e.target.closest('[data-building]'); if (t){ selectBuilding(BY_ID[t.getAttribute('data-building')]); return; }
+    t = e.target.closest('[data-floor]'); if (t){ selectFloor(view.b, +t.getAttribute('data-floor')); return; }
+    if (e.target.id === 'dispatchSel'){ dispatch(view.a); refreshPanel(); }
+  });
+  bodyEl.addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target.matches('[data-floor]')) selectFloor(view.b, +e.target.getAttribute('data-floor')); });
+  bodyEl.addEventListener('change', function(e){ if (e.target.id === 'followSel'){ follow = e.target.checked; } });
+  document.getElementById('dispatch').addEventListener('click', dispatchOne);
+  document.getElementById('dispatch5').addEventListener('click', function(){ for (var k=0;k<5;k++) dispatchOne(); });
+
+  // ---------------- camera ----------------
+  var target = new THREE.Vector3(0, 0, 0);
+  var cur  = { r:120, th:Math.PI/4, ph:0.86 }, want = { r:120, th:Math.PI/4, ph:0.86 };
+  var drag = null, pinch = 0, moved = 0;
+  function applyCamera(){ var sp = Math.sin(cur.ph), cp = Math.cos(cur.ph); camera.position.set(target.x + cur.r*sp*Math.sin(cur.th), target.y + cur.r*cp, target.z + cur.r*sp*Math.cos(cur.th)); camera.lookAt(target); }
+  var ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  // returns {agent} | {building} | {building, floor} | null
+  function pickAt(cx, cy){
+    var rect = canvas.getBoundingClientRect();
+    ndc.set(((cx-rect.left)/rect.width)*2-1, -((cy-rect.top)/rect.height)*2+1);
+    var hits;
+    if (floorMode){ var fa = pickFloor(cx, cy); return fa ? { agent: fa } : null; }
+    ray.setFromCamera(ndc, camera);
+    if (agentPick.length){ hits = ray.intersectObjects(agentPick); if (hits.length) return { agent: hits[0].object.userData.agent }; }
+    if (floorPick.length){ hits = ray.intersectObjects(floorPick); if (hits.length) return cutFloor == null ? { building: hits[0].object.userData.building, floor: hits[0].object.userData.floor } : { noop:true }; }
+    hits = ray.intersectObject(bodyMesh);
+    if (hits.length && hits[0].instanceId !== undefined){ var a = agents[hits[0].instanceId]; if (a.state !== 'work') return { agent:a }; }
+    hits = ray.intersectObjects(pickables.filter(function(m){ return m.userData.building !== cutBuilding; }));
+    if (hits.length) return { building: hits[0].object.userData.building };
+    return null;
+  }
+  var surfaces = [canvas, fc];
+  function on(ev, fn, opts){ surfaces.forEach(function(el){ el.addEventListener(ev, fn, opts); }); }
+  on('contextmenu', function(e){ e.preventDefault(); });
+  on('pointerdown', function(e){ e.currentTarget.setPointerCapture(e.pointerId); drag = { x:e.clientX, y:e.clientY, orbit: e.button===2 || e.shiftKey, button:e.button }; moved = 0; });
+  on('pointerup', function(e){
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag && moved < 5 && drag.button === 0){
+      var hit = pickAt(e.clientX, e.clientY);
+      if (!hit) back();
+      else if (hit.noop) {}
+      else if (hit.agent) selectAgent(hit.agent);
+      else if (hit.floor !== undefined) selectFloor(hit.building, hit.floor);
+      else selectBuilding(hit.building);
+    }
+    drag = null;
+  });
+  on('pointercancel', function(){ drag = null; });
+  on('pointermove', function(e){
+    if (!drag){ var h = pickAt(e.clientX, e.clientY); e.currentTarget.classList.toggle('pick', !!h); setHover(h && h.building && h.floor === undefined ? h.building : null); return; }
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; moved += Math.abs(dx)+Math.abs(dy);
+    if (floorMode) return;                                             // the plan is fixed; only zoom
+    if (drag.orbit){ want.th -= dx*0.005; want.ph = Math.max(0.3, Math.min(1.3, want.ph - dy*0.004)); }
+    else {
+      follow = false;
+      var k = want.r*0.0011, fx = -Math.sin(want.th), fz = -Math.cos(want.th), rx = -fz, rz = fx;
+      target.x -= (rx*dx + fx*(-dy))*k; target.z -= (rz*dx + fz*(-dy))*k;
+      var lim = HALF - 20; target.x = Math.max(-lim, Math.min(lim, target.x)); target.z = Math.max(-lim, Math.min(lim, target.z));
+    }
+  });
+  canvas.addEventListener('wheel', function(e){ e.preventDefault(); want.r = Math.max(30, Math.min(300, want.r * (1 + Math.sign(e.deltaY)*0.09))); }, { passive:false });
+  canvas.addEventListener('touchmove', function(e){ if (e.touches.length !== 2) return; e.preventDefault(); var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) want.r = Math.max(30, Math.min(300, want.r*(pinch/d))); pinch = d; }, { passive:false });
+  canvas.addEventListener('touchend', function(){ pinch = 0; });
+
+  var trafficEl = document.getElementById('traffic'), trafficV = document.getElementById('trafficV');
+  trafficEl.addEventListener('input', function(){ trafficLevel = trafficEl.value/100; trafficV.textContent = trafficEl.value + '%'; });
+  document.getElementById('neon').addEventListener('change', function(e){ neonMesh.visible = e.target.checked; });
+  function resize(){
+    var w = stage.clientWidth||1, h = stage.clientHeight||1;
+    renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2); fc.width = Math.round(w*dpr); fc.height = Math.round(h*dpr);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // a few agents already at work so the first look isn't empty
+  for (var w0=0; w0<8; w0++){
+    var a0 = agents[w0*7 % NA]; a0.state='work'; a0.timer=rand(10,26); a0.toolTimer = rand(0.5,2.5); a0.building.inside++;
+    a0.task = pick(TASKS[a0.role]||['Assigned task']);
+    logEvent(a0.building, 'arrive', '<b>' + esc(a0.name) + '</b> at desk · F' + (a0.divIdx+1) + ' ' + esc(a0.division.name));
+  }
+  var jobClock = 3;
+
+  // ---------------- loop ----------------
+  var clock = new THREE.Clock();
+  function tick(){
+    requestAnimationFrame(tick);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    if (!REDUCED){ jobClock -= dt; if (jobClock <= 0){ jobClock = rand(2.5, 6); if (Math.random() < 0.8) dispatchOne(); } }
+
+    var live = Math.round(MAXP*trafficLevel);
+    for (var p=0;p<MAXP;p++){
+      var q = pulses[p];
+      if (p >= live){ pulseMesh.setMatrixAt(p, HIDE); continue; }
+      if (!REDUCED) stepPulse(q, dt);
+      var x = sc(q.kx) + q.dx*q.t + (q.dz !== 0 ? -q.dz : 0), z = sc(q.kz) + q.dz*q.t + (q.dx !== 0 ? q.dx : 0);
+      P.set(x, 0.05, z); Sc.set(q.dx ? 1.6 : 0.7, 0.32, q.dx ? 0.7 : 1.6); Q.identity(); pulseMesh.setMatrixAt(p, M.compose(P,Q,Sc));
+    }
+    pulseMesh.instanceMatrix.needsUpdate = true;
+
+    var walk = clock.elapsedTime;
+    for (var g2=0; g2<NA; g2++){
+      var a = agents[g2];
+      if (!REDUCED) stepAgent(a, dt);
+      if (a.state === 'work'){ P.set(0,-20,0); Sc.set(0.001,0.001,0.001); Q.identity(); M.compose(P,Q,Sc); bodyMesh.setMatrixAt(g2, M); headMesh.setMatrixAt(g2, M); continue; }
+      var pos = agentPos(a);
+      var bob = (a.wait > 0 || REDUCED) ? 0 : Math.abs(Math.sin(walk*9 + g2))*0.08;
+      P.set(pos[0], bob, pos[1]); Sc.set(0.5, 0.95, 0.42); Q.identity(); bodyMesh.setMatrixAt(g2, M.compose(P,Q,Sc));
+      P.set(pos[0], 0.95 + bob, pos[1]); Sc.set(0.44, 0.36, 0.4); headMesh.setMatrixAt(g2, M.compose(P,Q,Sc));
+      if (selected === a){ selRing.position.set(pos[0], 0.04, pos[1]); if (follow){ target.x += (pos[0]-target.x)*0.08; target.z += (pos[1]-target.z)*0.08; target.y += (0-target.y)*0.08; } }
+    }
+    bodyMesh.instanceMatrix.needsUpdate = true; headMesh.instanceMatrix.needsUpdate = true;
+    if (selected && !selected.divisions && selected.state === 'work'){ selRing.visible = false; if (follow){ var e = selected.building.env; target.x += (e.x-target.x)*0.06; target.z += (e.z-target.z)*0.06; } } else if (selected && !selected.divisions) selRing.visible = true;
+
+    cur.r += (want.r-cur.r)*0.12; cur.th += (want.th-cur.th)*0.16; cur.ph += (want.ph-cur.ph)*0.16;
+    applyCamera();
+    if (floorMode) paintFloor(dt, walk); else renderer.render(scene, camera);
+  }
+  tick();
+
+  if (document.fonts && document.fonts.ready){ document.fonts.ready.then(function(){ boardMats[2].map = makeBoardTexture(); boardMats[2].needsUpdate = true; }); }
+})();
+</script>

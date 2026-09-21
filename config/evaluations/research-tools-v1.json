@@ -1,0 +1,36 @@
+{
+  "name": "research-tools",
+  "version": "1",
+  "status": "initial engineering gates; live quality evaluation pending",
+  "scope": "Search/tool foundation only, not investment performance or full city acceptance",
+  "mandatory_gates": {
+    "ungranted_tool_executions": 0,
+    "unobserved_seed_urls_accepted": 0,
+    "automatic_replays_after_unknown_outcome": 0,
+    "local_only_cloud_inference_calls": 0,
+    "tool_budget_overruns": 0,
+    "accepted_quotes_not_backed_by_archived_excerpts": 0
+  },
+  "live_cases": [
+    {
+      "id": "energy-comparison",
+      "question": "Compare energy companies and their potential for growth over the next 5 years.",
+      "checks": ["Disclose representative company selection", "Use relevant energy sources", "Support claims with archived evidence", "Distinguish estimates from observed outcomes"]
+    },
+    {
+      "id": "nonfinancial-research",
+      "question": "Compare approaches to restoring coral reefs and the evidence for their effectiveness.",
+      "checks": ["No investment-template leakage", "Relevant research evidence", "Distinguish interventions and limitations"]
+    }
+  ],
+  "measurement_record": [
+    "resolved configuration and model identity",
+    "source relevance reviewed by owner",
+    "claim-to-source verification",
+    "completion or actionable blocker",
+    "model calls and observed tokens",
+    "tool calls and outcome records",
+    "elapsed time and limitations"
+  ],
+  "held_out_policy": "Freeze additional owner-reviewed cases before release evaluation; these disclosed examples are development cases and cannot serve as held-out proof."
+}
