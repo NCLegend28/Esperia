@@ -443,6 +443,46 @@ class Ledger:
                     (job_id, str(report_path.resolve()), content_digest),
                 )
 
+    def complete_preparation(self, job_id: str) -> None:
+        """Finish a single settled question-framing call without research approval.
+
+        Preparation cannot register a report, resolve repairs or grant acceptance.
+        """
+        with self._transaction() as connection:
+            self._ensure_calls(connection)
+            self._ensure_owner_reviews(connection)
+            self._ensure_repairs(connection)
+            calls = connection.execute(
+                "SELECT stage,state FROM calls WHERE job_id=?", (job_id,)
+            ).fetchall()
+            if (
+                len(calls) != 1
+                or calls[0]["stage"] != "question-framing"
+                or calls[0]["state"] != "settled"
+            ):
+                raise PolicyError(
+                    "Preparation requires one settled question-framing call"
+                )
+            if (
+                connection.execute(
+                    "SELECT 1 FROM report_versions WHERE job_id=?", (job_id,)
+                ).fetchone()
+                or connection.execute(
+                    "SELECT 1 FROM repair_jobs WHERE job_id=?", (job_id,)
+                ).fetchone()
+            ):
+                raise PolicyError(
+                    "Research and repair jobs cannot complete as preparation"
+                )
+            if (
+                connection.execute(
+                    "UPDATE jobs SET state='completed',reserved=0 WHERE id=? AND state='running'",
+                    (job_id,),
+                ).rowcount
+                != 1
+            ):
+                raise PolicyError("Preparation job is not running")
+
     def block_research(self, job_id: str) -> None:
         """Release unused funds but preserve every uncertain call reservation."""
         with self._transaction() as connection:

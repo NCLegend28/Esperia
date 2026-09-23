@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Esperia Massing Study</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -92,6 +93,14 @@
   .task{font-size:12.5px; color:var(--ink); background:var(--panel-2); border-radius:4px; padding:8px 10px; border-left:2px solid var(--amber)}
   .row{display:flex; gap:8px; flex-wrap:wrap}
 
+  /* ---- agent scene: chase camera on the left, stats on the right ---- */
+  #app.agentmode{grid-template-columns:minmax(320px,50%) 1fr}
+  #app.agentmode #hint{display:none}
+  #app.agentmode #side{padding:16px 22px}
+  #chasehint{position:absolute; left:14px; bottom:14px; display:none; pointer-events:none; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.04em; color:#c7cde0; background:rgba(14,16,26,.7); backdrop-filter:blur(3px); border-radius:3px; padding:5px 9px}
+  #app.agentmode #chasehint{display:block}
+  .where{display:flex; align-items:center; gap:10px; margin:6px 0 12px; font-size:13px}
+  .where .pill{flex:none}
   /* ---- floor scene: plan on the left, data on the right ---- */
   #app.floormode{grid-template-columns:minmax(300px,42%) 1fr}
   #app.floormode #stage{background:#0d0f17}
@@ -141,12 +150,14 @@
 <div id="app">
   <header id="top">
     <div class="brand">Esperia <span>· block 0 · inspection study</span></div>
+    <div class="mono" id="clock" style="font-size:11.5px; color:var(--muted); letter-spacing:.04em">—</div>
     <div class="tag">Look study — jobs, stats and traffic are simulated</div>
   </header>
 
   <div id="stage">
     <canvas id="c"></canvas>
     <canvas id="fc"></canvas>
+    <div id="chasehint">FOLLOWING · DRAG to circle · SCROLL for distance · CLICK ground to release</div>
     <div id="hint">CLICK a labelled building → a floor → an avatar · CLICK ground to step back · DRAG pan · SCROLL zoom · RIGHT-DRAG orbit</div>
   </div>
 
@@ -181,6 +192,13 @@
         <label class="ctl" for="traffic">Data traffic <b id="trafficV">60%</b></label>
         <input type="range" id="traffic" min="0" max="100" value="60">
         <label class="tog"><input type="checkbox" id="neon" checked> Neon roof edges</label>
+        <label class="tog" style="margin-top:7px"><input type="checkbox" id="bloom" checked> Bloom — light bleeds</label>
+        <label class="ctl" for="bloomS" style="margin-top:8px">Bloom strength <b id="bloomV">1.1</b></label>
+        <input type="range" id="bloomS" min="0" max="2.5" step="0.1" value="1.1">
+        <label class="tog" style="margin-top:7px"><input type="checkbox" id="follow" checked> Follow the real clock</label>
+        <label class="ctl" for="hour" style="margin-top:8px">Scrub time <b id="hourV">19:00</b></label>
+        <input type="range" id="hour" min="0" max="24" step="0.25" value="19" disabled>
+        <p class="note">Sky, sun and shadows track your local time. Windows and neon come up as the light goes; the city is honest about the hour the same way it's honest about the work.</p>
       </section>
 
       <hr class="rule">
@@ -236,8 +254,8 @@
 
   // ---------------- named buildings (the inspectable ones) ----------------
   var BUILDINGS = [
-    { id:'u1', code:'U1', name:'City Hall', ring:'Centre', block:[MID,MID], purpose:'Mayor, budget ledger, approval inbox and the city-wide job board. Block 0 stays the capital.',
-      env:{w:6.2,d:6.2,h:34,y0:3.8}, divisions:[ {name:'Mayor’s office',role:'Mayor',offices:2},{name:'Budget ledger',role:'Ledger clerk',offices:2},{name:'Approvals',role:'Approvals officer',offices:2},{name:'Operations',role:'Operations',offices:3} ] },
+    { id:'u1', code:'U1', name:'City Hall', ring:'Centre', block:[MID,MID], purpose:'Mayor, budget ledger, approval inbox and the city-wide job board. One floor of rooms; block 0 stays the capital.',
+      env:{w:13,d:13,h:4.8,y0:1.2}, rooms:true, divisions:[ {name:'Mayor’s office',role:'Mayor',offices:2},{name:'Budget ledger',role:'Ledger clerk',offices:2},{name:'Approvals',role:'Approvals officer',offices:2},{name:'Operations',role:'Operations',offices:3} ] },
     { id:'u3', code:'U3', name:'Research', ring:'Commerce', block:[MID,MID-3], purpose:'Investigation workers, analysis and the independent review that gates every report.',
       env:{w:13.4,d:11.5,h:19,y0:1.2}, divisions:[ {name:'Source discovery',role:'Source scout',offices:4},{name:'Analysis',role:'Analyst',offices:4},{name:'Independent review',role:'Reviewer',offices:3},{name:'Editorial desk',role:'Editor',offices:2} ] },
     { id:'u2', code:'U2', name:'Library', ring:'Industrial', block:[MID+5,MID], purpose:'Discipline collections of archived public sources. Known within industrial, beside Port E.',
@@ -262,7 +280,7 @@
   };
   var LOG = [];
   function stamp(){ var d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function(n){ return String(n).padStart(2,'0'); }).join(':'); }
-  function logEvent(b, kind, html){ LOG.push({ t:stamp(), b:b, kind:kind, html:html }); if (LOG.length > 400) LOG.shift(); }
+  function logEvent(b, kind, html, a){ LOG.push({ t:stamp(), b:b, a:a||null, kind:kind, html:html }); if (LOG.length > 400) LOG.shift(); }
   var BY_ID = {}, BY_BLOCK = {};
   BUILDINGS.forEach(function(b){
     b.project = PROJECTS[b.id];
@@ -300,6 +318,8 @@
     'Recovery lead':['Resume from checkpoint without regenerating decisions']
   };
   var agents = [], AK0 = MID-2, AK1 = MID+3;
+  var RESERVE = 24;                                                         // hired when an architect's building gets divisions
+  var SPARE = ['Ansel','Bea','Corin','Dima','Esme','Farid','Gwen','Hal','Iris','Jori','Kes','Lark','Mara','Nico','Oona','Pell','Rai','Sy','Teo','Uri','Vale','Wes','Yuki','Zora'];
   var DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
   var resBlocks = [];
   for (var bi=0;bi<N;bi++) for (var bj=0;bj<N;bj++) if (district(bi,bj)===RES && !isEmpty(bi,bj) && !BY_BLOCK[bi+','+bj]) resBlocks.push([bi,bj]);
@@ -321,8 +341,31 @@
       d.agents[s[3]] = a;
       agents.push(a);
     }
+    for (var r0=0; r0<RESERVE; r0++){
+      var rh = pick(resBlocks), n0 = FIRST.length + r0;
+      agents.push({ id:n0, code:'A-'+String(n0+1).padStart(2,'0'), name:SPARE[r0 % SPARE.length], role:'—', building:null, division:null, divIdx:0, office:0, reserve:true,
+        model: pick(MODELS), home:rh, homeDoor:[rh[0], rh[1]+1], allowance:12, calls:0, tools:0, jobs:0, blocked:0,
+        state:'reserve', node:[rh[0], rh[1]+1], next:[rh[0], rh[1]+1], t:0, v:rand(2.2,3.6), wait:0, queue:[], timer:0, side: rng()<0.5?1:-1, task:null, visor: pick([C.cyan,C.mag,C.amber,C.white]), skin: pick([0xd9dbe6,0xc9cfe0,0xe8e3d6,0xbfc7d8]) });
+    }
   })();
-  var NA = agents.length;
+  var NA = agents.length, NA0 = FIRST.length;
+  // give a building its divisions (from the manifest) and staff them from the reserve pool
+  function hireInto(b, divisions){
+    b.divisions = (divisions || []).map(function(d){ return { name:String(d.name||'Division'), role:String(d.role||'Researcher'), offices:Math.max(1, Math.min(6, +d.offices||2)), agents:[] }; });
+    var pool = agents.filter(function(a){ return a.reserve; }), hired = 0;
+    b.divisions.forEach(function(d, di){
+      for (var o=0;o<d.offices;o++){
+        var a = pool.shift(); if (!a) return;
+        a.reserve = false; a.building = b; a.division = d; a.divIdx = di; a.office = o; a.role = d.role; a.state = 'home';
+        a.node = a.homeDoor.slice(); a.next = wanderNext(a); a.tools = irand(0,12); a.jobs = irand(0,4); a.calls = irand(0, a.allowance);
+        d.agents[o] = a; hired++;
+      }
+    });
+    if (!b.project) b.project = { job:'—', title:'No job yet', stage:'Divisions assigned · waiting for a first job', backend:'—', budget:'—', since:'—' };
+    b.purpose = b.purpose.replace(' No division assigned yet.', '') + (b.divisions.length ? ' ' + b.divisions.length + ' division' + (b.divisions.length>1?'s':'') + ', ' + hired + ' hired.' : '');
+    if (view.b === b) refreshPanel();
+    return hired;
+  }
 
   // ---------------- instance buffers ----------------
   var boxes=[], cyls=[], wins=[], neons=[];
@@ -400,51 +443,137 @@
     }
   }
 
-  function genCityHall(b){
-    var cx = b.env.x, cz = b.env.z;
-    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth); addBox(cx,1.2,cz,10,2.6,10,C.metal);
-    mark(b);
-    addBox(cx,3.8,cz,6.2,34,6.2,0x3a405e); addWindows(cx,3.8,cz,6.2,34,6.2,C.white,0.8,1.5,2.4,1);
-    addBox(cx,37.8,cz,4.2,9,4.2,0x2e3350); addWindows(cx,37.8,cz,4.2,9,4.2,C.cyan,0.8,1.4,2.2);
-    addBox(cx,46.8,cz,1.6,7,1.6,C.metal); addNeon(cx,53.8,cz,1.1,1.1,1.1,C.white);
-    addNeon(cx, 37.9, cz + 3.1 - 0.12, 6.2, 0.22, 0.22, C.cyan); addNeon(cx + 3.1 - 0.12, 37.9, cz, 0.22, 0.22, 6.2, C.cyan);
-    addNeon(cx, 46.9, cz + 2.1 - 0.12, 4.2, 0.22, 0.22, C.cyan); addNeon(cx + 2.1 - 0.12, 46.9, cz, 0.22, 0.22, 4.2, C.cyan);
+  // ================= building grammar: a building is a kit of parts =================
+  // Every named building is a SPEC: a palette of named slots plus an ordered list of parts.
+  // Positions are offsets from the lot centre (x, z) and heights from the board (y). Units are board units; a lot is 14 wide.
+  // The same spec is what an architecture agent writes and what a MagicaVoxel kit can execute part-by-part.
+  var SPECS = {
+    u1:{ palette:{ plinth:'#1a1d28', structure:'#2e3450', trim:'#232840', metal:'#8f97a6', glass:'#3fd8f0', neonA:'#3fd8f0', neonB:'#ff5fd2', white:'#eef2ff' },
+      parts:[
+        { type:'plinth', w:13.6, d:13.6, h:1.2 },
+        { type:'volume', y:1.2, w:13, d:13, h:4.8, slot:'structure', glass:{ slot:'glass', density:0.9, cw:1.3, ch:2.2, from:1.2 } },
+        { type:'pylons', y:1.2, spread:12.4, size:1.2, h:7, slot:'metal', cap:'neonA' },
+        { type:'volume', y:6.0, w:13.6, d:13.6, h:0.5, slot:'trim', edges:'neonA' },
+        { type:'strip', y:6.7, axis:'x', len:7, slot:'white' }, { type:'strip', y:6.7, axis:'z', len:7, slot:'white' },
+        { type:'mast', y:6.5, h:7, slot:'metal', beacon:'white', beaconSize:0.9 },
+        { type:'facade_lights', side:'w', y:1.5, h:4.2, count:5, pitch:2.5, slots:['neonB','neonA'] },
+        { type:'facade_lights', side:'s', y:1.5, h:4.2, count:5, pitch:2.5, slots:['neonA','neonB'] },
+        { type:'sign', side:'e', text:'ESPERIA', y:2.2, h:2.2, slot:'neonA' }
+      ] },
+    u3:{ palette:{ plinth:'#1a1d28', structure:'#2c3250', trim:'#353b58', glass:'#3fd8f0', neonA:'#3fd8f0' },
+      parts:[
+        { type:'plinth', w:13.4, d:13.4, h:1.2 },
+        { type:'fins', y:1.2, axis:'x', count:7, pitch:1.9, t:1.3, d:11.5, h:16, wave:3.5, slot:'structure', alt:'trim', glassOn:'last', glass:{ slot:'glass', density:0.7, cw:1.7, ch:2.4, from:1 } },
+        { type:'strip', x:6.4, y:17.3, axis:'z', len:11.5, slot:'neonA' }
+      ] },
+    u2:{ palette:{ plinth:'#1a1d28', structure:'#3c4a47', gold:'#d8ad55', glass:'#ffb45c', neonA:'#ffb45c' },
+      parts:[
+        { type:'plinth', w:13.4, d:13.4, h:1.2 },
+        { type:'slabs', y:1.2, count:4, pitch:3.0, w:12, h:14, t:1.4, slot:'structure', foot:'gold', glass:{ slot:'glass', density:0.75, cw:1.5, ch:2.2, from:1 } },
+        { type:'strip', y:15.3, z:5.1, axis:'x', len:12, slot:'neonA' }
+      ] },
+    t1:{ palette:{ plinth:'#1a1d28', structure:'#2a2f47', glass:'#eef2ff', neonA:'#ff5fd2' },
+      parts:[ { type:'plinth', w:12, d:12, h:0.6 }, { type:'volume', y:0.6, w:10, d:10, h:22, slot:'structure', glass:{ slot:'glass', density:0.65 }, edges:'neonA', corner:'neonA' },
+        { type:'setback', w:7, d:7, h:8, slot:'structure', glass:{ slot:'glass', density:0.6 }, edges:'neonA' },
+        { type:'antenna_array', y:30.6, x:0.5, count:4, pitch:1.2, h:3, axis:'x', tip:'neonA' } ] },
+    t2:{ palette:{ plinth:'#1a1d28', structure:'#313a58', glass:'#eef2ff', neonA:'#3fd8f0' },
+      parts:[ { type:'plinth', w:11, d:13, h:0.6 }, { type:'volume', y:0.6, w:9, d:11, h:24, slot:'structure', glass:{ slot:'glass', density:0.65 }, edges:'neonA', corner:'neonA' },
+        { type:'sign', side:'s', text:'EVAL LAB', y:3, h:2.4, slot:'neonA' } ] },
+    t3:{ palette:{ plinth:'#1a1d28', structure:'#3a3456', glass:'#eef2ff', neonA:'#3fd8f0' },
+      parts:[ { type:'plinth', w:13, d:11, h:0.6 }, { type:'volume', y:0.6, w:11, d:9, h:22, slot:'structure', glass:{ slot:'glass', density:0.65 }, edges:'neonA', corner:'neonA' } ] },
+    t4:{ palette:{ plinth:'#1a1d28', structure:'#262b40', glass:'#eef2ff', neonA:'#3fd8f0' },
+      parts:[ { type:'plinth', w:12, d:12, h:0.6 }, { type:'volume', y:0.6, w:10, d:10, h:18, slot:'structure', glass:{ slot:'glass', density:0.65 }, edges:'neonA', corner:'neonA' } ] }
+  };
+  function hex(c){ return typeof c === 'string' ? parseInt(c.slice(1), 16) : c; }
+  function genSpec(b){
+    var sp = b.spec, e = b.env, pal = sp.palette, marked = false, stack = 0;
+    function col(slot){ return hex(pal[slot] !== undefined ? pal[slot] : pal.structure); }
+    function glassOn(x,y,z,w,h,d,g){ if (g) addWindows(x,y,z,w,h,d,col(g.slot||'glass'),g.density||0.65,g.cw||1.9,g.ch||2.6,g.from||1.2); }
+    sp.parts.forEach(function(p){
+      var x = e.x + (p.x||0), z = e.z + (p.z||0), y = p.y||0, k, c;
+      if (p.type !== 'plinth' && !marked){ mark(b); marked = true; }           // everything after the plinth hides in cutaway
+      switch (p.type){
+        case 'plinth': addBox(e.x,0,e.z,p.w,p.h,p.d,col(p.slot||'plinth')); break;
+        case 'volume':
+          addBox(x,y,z,p.w,p.h,p.d,col(p.slot)); glassOn(x,y,z,p.w,p.h,p.d,p.glass);
+          if (p.edges){ c = col(p.edges); var t = y+p.h+0.12; addNeon(x,t,z+p.d/2-0.12,p.w,0.22,0.22,c); addNeon(x,t,z-p.d/2+0.12,p.w,0.22,0.22,c); addNeon(x+p.w/2-0.12,t,z,0.22,0.22,p.d,c); addNeon(x-p.w/2+0.12,t,z,0.22,0.22,p.d,c); }
+          if (p.corner) addNeon(x+p.w/2+0.05, y+p.h*0.5, z+p.d/2+0.05, 0.16, p.h*0.9, 0.16, col(p.corner));
+          break;
+        case 'fins':
+          for (k=0;k<p.count;k++){
+            var off = (k-(p.count-1)/2)*p.pitch, fh = p.h + (p.wave ? Math.sin(k*1.3)*p.wave : 0), last = k === p.count-1;
+            if (p.axis === 'x'){ addBox(x+off,y,z,p.t,fh,p.d,col(k%2 && p.alt ? p.alt : p.slot)); if (p.glassOn==='last' && last) glassOn(x+off,y,z,p.t,fh,p.d,p.glass); }
+            else { addBox(x,y,z+off,p.d,fh,p.t,col(k%2 && p.alt ? p.alt : p.slot)); if (p.glassOn==='last' && last) glassOn(x,y,z+off,p.d,fh,p.t,p.glass); }
+          }
+          break;
+        case 'slabs':
+          for (k=0;k<p.count;k++){ var zz = z + (k-(p.count-1)/2)*p.pitch; addBox(x,y,zz,p.w,p.h,p.t,col(p.slot)); if (p.foot) addBox(x,y,zz,p.w-2,0.5,p.t+0.1,col(p.foot)); if (k === p.count-1) glassOn(x,y,zz,p.w,p.h,p.t,p.glass); }
+          break;
+        case 'pylons':
+          for (k=0;k<4;k++){ var px = x + (k%2 ? p.spread/2 : -p.spread/2), pz = z + (k<2 ? -p.spread/2 : p.spread/2); addBox(px,y,pz,p.size,p.h,p.size,col(p.slot)); if (p.cap) addNeon(px, y+p.h+0.1, pz, 0.5, 0.3, 0.5, col(p.cap)); }
+          break;
+        case 'strip': addNeon(x, y, z, p.axis==='x' ? p.len : (p.t||0.22), p.t||0.22, p.axis==='z' ? p.len : (p.t||0.22), col(p.slot)); break;
+        case 'mast': addBox(x,y,z,0.5,p.h,0.5,col(p.slot||'metal')); if (p.beacon) addNeon(x, y+p.h+0.4, z, p.beaconSize||0.9, p.beaconSize||0.9, p.beaconSize||0.9, col(p.beacon)); break;
+        case 'facade_lights':
+          for (k=0;k<p.count;k++){
+            var a = (k-(p.count-1)/2)*p.pitch, cc = col(p.slots[k % p.slots.length]), half = e.w/2 + 0.05;
+            if (p.side==='w') addNeon(e.x-half, y, e.z+a, 0.12, p.h, 0.18, cc); else if (p.side==='e') addNeon(e.x+half, y, e.z+a, 0.12, p.h, 0.18, cc);
+            else if (p.side==='n') addNeon(e.x+a, y, e.z-half, 0.18, p.h, 0.12, cc); else addNeon(e.x+a, y, e.z+half, 0.18, p.h, 0.12, cc);
+          }
+          break;
+        case 'cylinder': addCyl(x,y,z,p.r,p.h,col(p.slot)); if (p.cap) addCyl(x,y+p.h,z,p.r*1.05,0.7,col(p.cap)); break;
+        case 'setback':                                                     // stacks on whatever came before it
+          y = stack; addBox(x,y,z,p.w,p.h,p.d,col(p.slot)); glassOn(x,y,z,p.w,p.h,p.d,p.glass);
+          if (p.edges){ c = col(p.edges); var t2 = y+p.h+0.12; addNeon(x,t2,z+p.d/2-0.12,p.w,0.22,0.22,c); addNeon(x,t2,z-p.d/2+0.12,p.w,0.22,0.22,c); addNeon(x+p.w/2-0.12,t2,z,0.22,0.22,p.d,c); addNeon(x-p.w/2+0.12,t2,z,0.22,0.22,p.d,c); }
+          if (p.corner) addNeon(x+p.w/2+0.05, y+p.h*0.5, z+p.d/2+0.05, 0.16, p.h*0.9, 0.16, col(p.corner));
+          break;
+        case 'sign': addSign(e, p, col); break;
+        case 'bridge': {
+          var x2 = e.x + (p.x2||0), z2 = e.z + (p.z2||0), bt = p.t||1, bw = x !== x2 ? Math.abs(x2-x)+bt : bt, bd = z !== z2 ? Math.abs(z2-z)+bt : bt;
+          addBox((x+x2)/2, y, (z+z2)/2, bw, bt, bd, col(p.slot||'metal'));
+          if (p.strip) addNeon((x+x2)/2, y+bt, (z+z2)/2, Math.max(0.22, bw-0.5), 0.22, Math.max(0.22, bd-0.5), col(p.strip));
+          break;
+        }
+        case 'antenna_array':
+          for (k=0;k<(p.count||3);k++){
+            var ao = (k-((p.count||3)-1)/2)*(p.pitch||1.5), ax = p.axis === 'z' ? x : x+ao, az = p.axis === 'z' ? z+ao : z, ah = (p.h||4)*(1-0.12*(k%3));
+            addBox(ax, y, az, 0.22, ah, 0.22, col(p.slot||'metal')); addNeon(ax, y+ah+0.2, az, 0.4, 0.4, 0.4, col(p.tip||'neonB'));
+          }
+          break;
+      }
+      // the stack: top of the bodies so far, where the next setback lands
+      if (p.type === 'setback') stack = y + p.h;
+      else if (p.type === 'plinth' || p.type === 'volume' || p.type === 'fins' || p.type === 'slabs' || p.type === 'cylinder') stack = Math.max(stack, y + (p.h||0) + (p.type === 'fins' && p.wave ? p.wave : 0));
+    });
     endMark(b);
   }
-  function genResearch(b){
-    var cx = b.env.x, cz = b.env.z;
-    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth);
-    mark(b);
-    for (var f=0;f<7;f++){ var x = cx + (f-3)*1.9, h = 16 + Math.sin(f*1.3)*3.5; addBox(x,1.2,cz,1.3,h,11.5,f%2?0x353b58:0x2c3250); if (f===6) addWindows(x,1.2,cz,1.3,h,11.5,C.cyan,0.7,1.7,2.4,1); }
-    addNeon(cx + 3*1.9 + 0.7, 1.2 + 16 + 0.1, cz, 0.2, 0.2, 11.5, C.cyan);
-    endMark(b);
+  // 3×5 pixel font for signs (same glyphs as the voxkit rasteriser)
+  var GLYPHS = {A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101110100110101',L:'100100100100111',M:'101111111101101',N:'101111111111101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101011',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'010101101101010','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100110101010','7':'111001010010010','8':'010101010101010','9':'010101011001110','-':'000000111000000','·':'000000010000000'};
+  function addSign(e, p, col){
+    var text = String(p.text||'').toUpperCase(), h = p.h||2.4, y = p.y||0, w = p.w || Math.max(2, text.length*h*0.7), side = p.side||'s';
+    var half = e.w/2 + 0.35, cell = h/7, total = text.length*4*cell - cell, start = -total/2, flip = side === 'n' || side === 'e';
+    var alongX = side === 'n' || side === 's', px = alongX ? e.x + (p.x||0) : (side === 'w' ? e.x-half : e.x+half), pz = alongX ? (side === 'n' ? e.z-half : e.z+half) : e.z + (p.z||0);
+    if (alongX) addBox(px, y, pz, w, h, 0.22, col(p.panel||'plinth')); else addBox(px, y, pz, 0.22, h, w, col(p.panel||'plinth'));
+    var out = side === 'n' ? -0.16 : (side === 's' ? 0.16 : (side === 'w' ? -0.16 : 0.16));
+    for (var gi=0; gi<text.length; gi++){
+      var rows = GLYPHS[text[gi]]; if (!rows) continue;
+      var g0 = start + gi*4*cell;
+      for (var ry=0; ry<5; ry++) for (var rx=0; rx<3; rx++){
+        if (rows[ry*3+rx] !== '1') continue;
+        var u = g0 + (rx+0.5)*cell; if (flip) u = -u;
+        var v = y + h - cell - (ry+0.5)*cell - cell/2;
+        if (alongX) addNeon(px+u, v, pz+out, cell, cell, 0.22, col(p.slot||'neonA')); else addNeon(px+out, v, pz+u, 0.22, cell, cell, col(p.slot||'neonA'));
+      }
+    }
   }
-  function genLibrary(b){
-    var cx = b.env.x, cz = b.env.z;
-    addBox(cx,0,cz,13.4,1.2,13.4,C.plinth);
-    mark(b);
-    for (var s=0;s<4;s++){ var zz = cz + (s-1.5)*3.0; addBox(cx,1.2,zz,12,14,1.4,0x3c4a47); addBox(cx,1.2,zz,10,0.5,1.5,C.gold); }
-    addWindows(cx,1.2,cz+1.5*3.0,12,14,1.4,C.amber,0.75,1.5,2.2,1);
-    addNeon(cx, 15.3, cz + 1.5*3.0 + 0.6, 12, 0.2, 0.2, C.amber);
-    endMark(b);
-  }
-  function genTower(b){
-    var e = b.env, col = pick(C.com);
-    addBox(e.x,0,e.z,e.w+2,0.6,e.d+2,C.plinth);
-    mark(b);
-    addBox(e.x,e.y0,e.z,e.w,e.h,e.d,col); addWindows(e.x,e.y0,e.z,e.w,e.h,e.d,C.white,0.65,1.9,2.6,1.2);
-    var c = b.id==='t1' ? C.mag : C.cyan;
-    addNeon(e.x, e.y0+e.h+0.12, e.z + e.d/2 - 0.12, e.w, 0.22, 0.22, c); addNeon(e.x + e.w/2 - 0.12, e.y0+e.h+0.12, e.z, 0.22, 0.22, e.d, c);
-    addNeon(e.x + e.w/2 + 0.05, e.y0 + e.h*0.5, e.z + e.d/2 + 0.05, 0.16, e.h*0.9, 0.16, c);
-    endMark(b);
-  }
+  BUILDINGS.forEach(function(b){ b.spec = SPECS[b.id]; });
 
+  var LOT_RANGE = {};                                                   // "i,j" → instance ranges, so a lot can be swapped for a model
   for (var i=0;i<N;i++) for (var j=0;j<N;j++){
-    var nb = BY_BLOCK[i+','+j];
-    if (nb){ if (nb.id==='u1') genCityHall(nb); else if (nb.id==='u3') genResearch(nb); else if (nb.id==='u2') genLibrary(nb); else genTower(nb); continue; }
-    if (isEmpty(i,j)) continue;
-    var d = district(i,j);
-    if (d === RES) genResidential(i,j); else if (d === COM) genCommerce(i,j); else genIndustrial(i,j);
+    var nb = BY_BLOCK[i+','+j], lr = { b0:boxes.length, w0:wins.length, n0:neons.length, c0:cyls.length };
+    if (nb){ genSpec(nb); }
+    else if (!isEmpty(i,j)){ var d = district(i,j); if (d === RES) genResidential(i,j); else if (d === COM) genCommerce(i,j); else genIndustrial(i,j); }
+    lr.b1 = boxes.length; lr.w1 = wins.length; lr.n1 = neons.length; lr.c1 = cyls.length; LOT_RANGE[i+','+j] = lr;
   }
 
   // ---------------- board texture ----------------
@@ -507,9 +636,10 @@
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  var scene = new THREE.Scene(); scene.background = new THREE.Color(SKY); scene.fog = new THREE.Fog(SKY, 150, 380);
+  var scene = new THREE.Scene(); scene.background = new THREE.Color(SKY);      // no fog: the sky and light follow the real clock
   var camera = new THREE.PerspectiveCamera(36, 1, 1, 1200);
-  scene.add(new THREE.HemisphereLight(0x5a6aa8, 0x0c0e16, 0.85)); scene.add(new THREE.AmbientLight(0x2a3150, 0.6));
+  var hemi = new THREE.HemisphereLight(0x5a6aa8, 0x0c0e16, 0.85); scene.add(hemi);
+  var ambient = new THREE.AmbientLight(0x2a3150, 0.6); scene.add(ambient);
   var sun = new THREE.DirectionalLight(0xa9b8ff, 0.55); sun.position.set(-70, 120, 50); sun.castShadow = true;
   sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
   sun.shadow.camera.left = -150; sun.shadow.camera.right = 150; sun.shadow.camera.top = 150; sun.shadow.camera.bottom = -150; sun.shadow.camera.near = 20; sun.shadow.camera.far = 360; sun.shadow.bias = -0.0008;
@@ -538,8 +668,46 @@
   }
   var boxMesh = instanced(boxGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), boxes, boxM); boxMesh.castShadow = boxMesh.receiveShadow = true;
   var cylMesh = instanced(cylGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), cyls, function(c){ P.set(c[0],c[1],c[2]); Sc.set(c[3],c[4],c[3]); Q.identity(); return M.compose(P,Q,Sc); }); cylMesh.castShadow = cylMesh.receiveShadow = true;
-  var winMesh = instanced(planeGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), wins, winM);
-  var neonMesh = instanced(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), neons, neonM);
+  var winMesh = instanced(planeGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), wins, winM); winMesh.userData.glow = true;
+  var neonMesh = instanced(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), neons, neonM); neonMesh.userData.glow = true;
+
+  // ---------------- day / night, tuned to the local clock ----------------
+  // keyframes by hour: sky, hemisphere sky/ground + intensity, sun colour + intensity, ambient intensity, glow of windows/neon
+  var TIMELINE = [
+    { h:0,    sky:0x0a0d1a, hs:0x1a2140, hg:0x06070c, hi:0.55, sc:0x7f8fc0, si:0.10, ai:0.35, glow:1.00, name:'night' },
+    { h:4.5,  sky:0x0a0d1a, hs:0x1a2140, hg:0x06070c, hi:0.55, sc:0x7f8fc0, si:0.10, ai:0.35, glow:1.00, name:'night' },
+    { h:6,    sky:0x4a3a5e, hs:0x7a6080, hg:0x14111c, hi:0.65, sc:0xff9a70, si:0.45, ai:0.40, glow:0.85, name:'dawn' },
+    { h:7.5,  sky:0x9fbdd6, hs:0xc8dbe8, hg:0x3e4c42, hi:0.78, sc:0xffe6c8, si:0.78, ai:0.35, glow:0.40, name:'morning' },
+    { h:12.5, sky:0xbcd6e8, hs:0xdfeaf0, hg:0x566652, hi:0.82, sc:0xfff6e8, si:0.88, ai:0.22, glow:0.25, name:'day' },
+    { h:17,   sky:0xd9b088, hs:0xe6c6a4, hg:0x3a3a48, hi:0.85, sc:0xffc080, si:0.80, ai:0.35, glow:0.50, name:'golden hour' },
+    { h:19,   sky:0x2a2850, hs:0x5a6aa8, hg:0x0c0e16, hi:0.85, sc:0xa9b8ff, si:0.35, ai:0.50, glow:0.90, name:'dusk' },
+    { h:21,   sky:0x0f1224, hs:0x243060, hg:0x08090f, hi:0.60, sc:0x8a98cc, si:0.15, ai:0.40, glow:1.00, name:'evening' },
+    { h:24,   sky:0x0a0d1a, hs:0x1a2140, hg:0x06070c, hi:0.55, sc:0x7f8fc0, si:0.10, ai:0.35, glow:1.00, name:'night' }
+  ];
+  var followClock = true, scrubHour = 19, timeName = '';
+  var cA = new THREE.Color(), cB = new THREE.Color();
+  function lerpHex(a, b, t){ return cA.setHex(a).lerp(cB.setHex(b), t); }
+  function localHour(){ var d = new Date(); return d.getHours() + d.getMinutes()/60 + d.getSeconds()/3600; }
+  function applyTime(h){
+    var i = 0; while (i < TIMELINE.length-2 && TIMELINE[i+1].h <= h) i++;
+    var a = TIMELINE[i], b = TIMELINE[i+1], t = (h - a.h)/(b.h - a.h);
+    t = t*t*(3-2*t);
+    scene.background.copy(lerpHex(a.sky, b.sky, t));
+    hemi.color.copy(lerpHex(a.hs, b.hs, t)); hemi.groundColor.copy(lerpHex(a.hg, b.hg, t)); hemi.intensity = a.hi + (b.hi-a.hi)*t;
+    sun.color.copy(lerpHex(a.sc, b.sc, t)); sun.intensity = a.si + (b.si-a.si)*t;
+    ambient.intensity = a.ai + (b.ai-a.ai)*t;
+    var glow = a.glow + (b.glow-a.glow)*t;
+    winMesh.material.color.setScalar(glow); neonMesh.material.color.setScalar(0.35 + 0.65*glow);
+    // the sun crosses east → west between 6 and 18; at night the same light is the moon, low in the north-west
+    if (h > 5.5 && h < 18.5){ var ang = (h - 6)/12*Math.PI; sun.position.set(Math.cos(ang)*150, Math.max(0.08, Math.sin(ang))*150 + 15, 55); }
+    else sun.position.set(-70, 110, 50);
+    timeName = t < 0.5 ? a.name : b.name;
+  }
+  var clockEl = document.getElementById('clock');
+  function updateClock(h){
+    var hh = Math.floor(h), mm = Math.floor((h - hh)*60);
+    clockEl.textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') + ' · ' + timeName + (followClock ? '' : ' · scrubbed');
+  }
 
   // pickable envelopes for named buildings
   var pickables = [];
@@ -559,7 +727,7 @@
     m.position.set(e.x, (e.h+e.y0)/2, e.z); m.userData.building = b; scene.add(m); pickables.push(m);
     // always-on label so it's obvious what can be opened
     b.label = labelSprite(b.name, b.code + '  ·  click to open'); b.label.position.set(e.x, e.y0 + e.h + 4.5, e.z); scene.add(b.label);
-    var pin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 0.14), new THREE.MeshBasicMaterial({ color:C.cyan })); pin.position.set(e.x, e.y0 + e.h + 1.6, e.z); scene.add(pin);
+    var pin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 0.14), new THREE.MeshBasicMaterial({ color:C.cyan })); pin.position.set(e.x, e.y0 + e.h + 1.6, e.z); pin.userData.glow = true; scene.add(pin);
     // hover outline
     b.outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(e.w+0.6, e.h+e.y0+0.3, e.d+0.6)), new THREE.LineBasicMaterial({ color:C.cyan, transparent:true, opacity:0.95 }));
     b.outline.position.set(e.x, (e.h+e.y0)/2, e.z); b.outline.visible = false; scene.add(b.outline);
@@ -567,11 +735,131 @@
   var hovered = null;
   function setHover(b){ if (hovered === b) return; if (hovered) hovered.outline.visible = false; hovered = b; if (b) b.outline.visible = true; }
 
+  // ---------------- selective bloom: only the emissive things bleed ----------------
+  var bloomOn = true, bloomStrength = 1.1, rtG = null, rtA = null, rtB = null;
+  var blackMat = new THREE.MeshBasicMaterial({ color:0x000000 });
+  var quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quadScene = new THREE.Scene();
+  var QV = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  var blurMat = new THREE.ShaderMaterial({
+    uniforms:{ tDiffuse:{ value:null }, dir:{ value:new THREE.Vector2(1,0) }, texel:{ value:new THREE.Vector2(1,1) } },
+    vertexShader:QV, depthTest:false, depthWrite:false,
+    fragmentShader:'uniform sampler2D tDiffuse; uniform vec2 dir; uniform vec2 texel; varying vec2 vUv; void main(){ float w0=0.227027,w1=0.1945946,w2=0.1216216,w3=0.054054,w4=0.016216; vec3 c = texture2D(tDiffuse, vUv).rgb*w0; vec2 o = dir*texel*1.7; c += (texture2D(tDiffuse, vUv+o).rgb + texture2D(tDiffuse, vUv-o).rgb)*w1; c += (texture2D(tDiffuse, vUv+o*2.0).rgb + texture2D(tDiffuse, vUv-o*2.0).rgb)*w2; c += (texture2D(tDiffuse, vUv+o*3.0).rgb + texture2D(tDiffuse, vUv-o*3.0).rgb)*w3; c += (texture2D(tDiffuse, vUv+o*4.0).rgb + texture2D(tDiffuse, vUv-o*4.0).rgb)*w4; gl_FragColor = vec4(c, 1.0); }'
+  });
+  var compMat = new THREE.ShaderMaterial({
+    uniforms:{ tGlow:{ value:null }, strength:{ value:1 } }, vertexShader:QV, depthTest:false, depthWrite:false, transparent:true, blending:THREE.AdditiveBlending,
+    fragmentShader:'uniform sampler2D tGlow; uniform float strength; varying vec2 vUv; void main(){ vec3 c = texture2D(tGlow, vUv).rgb * strength; gl_FragColor = vec4(c, 1.0); }'
+  });
+  var quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurMat); quadScene.add(quad);
+  function makeRTs(){
+    var sz = new THREE.Vector2(); renderer.getDrawingBufferSize(sz);
+    var w = Math.max(2, Math.floor(sz.x/2)), h = Math.max(2, Math.floor(sz.y/2)), opt = { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, format:THREE.RGBAFormat, depthBuffer:true };
+    [rtG, rtA, rtB].forEach(function(r){ if (r) r.dispose(); });
+    rtG = new THREE.WebGLRenderTarget(w, h, opt); rtA = new THREE.WebGLRenderTarget(w, h, { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, format:THREE.RGBAFormat, depthBuffer:false }); rtB = rtA.clone();
+    blurMat.uniforms.texel.value.set(1/w, 1/h);
+  }
+  function renderWithBloom(){
+    if (!rtG) makeRTs();
+    // 1. glow pass: everything that isn't emissive goes black, so occlusion is right and only light bleeds
+    var swapped = [];
+    scene.traverse(function(o){
+      if (o.isMesh && !(o.userData.glow || o.material === MAT.monOn)){ swapped.push([o, o.material]); o.material = blackMat; }
+      else if ((o.isSprite) && o.visible){ swapped.push([o, null]); o.visible = false; }
+    });
+    var bg = scene.background; scene.background = null;
+    renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(rtG); renderer.clear(); renderer.render(scene, camera);
+    swapped.forEach(function(s){ if (s[1]) s[0].material = s[1]; else s[0].visible = true; });
+    scene.background = bg;
+    // 2. blur, two ping-pong rounds at half resolution
+    quad.material = blurMat;
+    for (var i=0;i<2;i++){
+      blurMat.uniforms.tDiffuse.value = (i===0 ? rtG : rtB).texture; blurMat.uniforms.dir.value.set(1,0); renderer.setRenderTarget(rtA); renderer.render(quadScene, quadCam);
+      blurMat.uniforms.tDiffuse.value = rtA.texture; blurMat.uniforms.dir.value.set(0,1); renderer.setRenderTarget(rtB); renderer.render(quadScene, quadCam);
+    }
+    // 3. the real frame, then the glow added on top
+    renderer.setRenderTarget(null); renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera);
+    quad.material = compMat; compMat.uniforms.tGlow.value = rtB.texture; compMat.uniforms.strength.value = bloomStrength;
+    renderer.autoClear = false; renderer.render(quadScene, quadCam); renderer.autoClear = true;
+  }
+  renderer.shadowMap.autoUpdate = false;
+
+  // ---------------- built models: city/build/manifest.json → glTF on lots ----------------
+  // Serve the city folder over HTTP (python3 -m http.server 8090 --directory city) and this loads what the
+  // architects built. On the published artifact the fetch is blocked and the spec-rendered boxes stay.
+  var MODELS = {};
+  function hideLot(i, j){
+    var r = LOT_RANGE[i+','+j]; if (!r) return;
+    var k;
+    for (k=r.b0;k<r.b1;k++) boxMesh.setMatrixAt(k, HIDE);
+    for (k=r.w0;k<r.w1;k++) winMesh.setMatrixAt(k, HIDE);
+    for (k=r.n0;k<r.n1;k++) neonMesh.setMatrixAt(k, HIDE);
+    for (k=r.c0;k<r.c1;k++) cylMesh.setMatrixAt(k, HIDE);
+    boxMesh.instanceMatrix.needsUpdate = winMesh.instanceMatrix.needsUpdate = neonMesh.instanceMatrix.needsUpdate = cylMesh.instanceMatrix.needsUpdate = true;
+  }
+  // a reader for the glTF voxkit writes: one buffer (data URI), POSITION / NORMAL / COLOR_0 float32, uint32 indices
+  function parseVoxkitGltf(g){
+    var uri = g.buffers[0].uri, bin = Uint8Array.from(atob(uri.slice(uri.indexOf(',')+1)), function(c){ return c.charCodeAt(0); }).buffer;
+    function acc(i){ var a = g.accessors[i], v = g.bufferViews[a.bufferView], n = { SCALAR:1, VEC3:3 }[a.type];
+      return a.componentType === 5126 ? new Float32Array(bin, v.byteOffset, a.count*n) : new Uint32Array(bin, v.byteOffset, a.count*n); }
+    var group = new THREE.Group();
+    g.meshes.forEach(function(m){
+      var pr = m.primitives[0], geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(acc(pr.attributes.POSITION), 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(acc(pr.attributes.NORMAL), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(acc(pr.attributes.COLOR_0), 3));
+      geo.setIndex(new THREE.BufferAttribute(acc(pr.indices), 1));
+      var emissive = m.name === 'emissive';
+      var mat = emissive ? new THREE.MeshBasicMaterial({ vertexColors:true }) : new THREE.MeshLambertMaterial({ vertexColors:true });
+      var mesh = new THREE.Mesh(geo, mat); mesh.castShadow = !emissive; mesh.receiveShadow = !emissive; mesh.userData.glow = emissive;
+      group.add(mesh);
+    });
+    return group;
+  }
+  function placeModel(id, entry, gltf){
+    var lot = entry.lot, i = lot[0], j = lot[1];
+    if (i < 0 || j < 0 || i >= N || j >= N) return;
+    hideLot(i, j);
+    var group = parseVoxkitGltf(gltf);
+    group.position.set(bc(i), 0, bc(j)); scene.add(group);
+    var box = new THREE.Box3().setFromObject(group), h = box.max.y - box.min.y;
+    MODELS[id] = { group:group, entry:entry, lot:lot };
+    // give it a label and a panel like any other building
+    var b = BY_BLOCK[i+','+j];
+    if (!b){
+      b = { id:'m-'+id, code:entry.code || id.toUpperCase(), name:entry.name || id, ring: ring(i,j) <= 2 ? 'Residential' : (ring(i,j) <= 4 ? 'Commerce' : 'Industrial'),
+            block:[i,j], purpose:(entry.architect ? 'Designed by ' + entry.architect.replace('arch-','') : 'Built by the kit') + (entry.lineage && entry.lineage.length ? ' · descends from ' + entry.lineage.join(', ') : '') + '. No division assigned yet.',
+            env:{ x:bc(i), z:bc(j), w:Math.max(4, box.max.x-box.min.x), d:Math.max(4, box.max.z-box.min.z), h:Math.max(3, h-1.2), y0:1.2 }, divisions:[], inside:0, range:{ b0:0,b1:0,w0:0,w1:0,n0:0,n1:0 }, door:[i, j+1], model:true };
+      BUILDINGS.push(b); BY_ID[b.id] = b; BY_BLOCK[i+','+j] = b;
+      var e = b.env, m = new THREE.Mesh(new THREE.BoxGeometry(e.w+2, e.h+e.y0, e.d+2), pickMat);
+      m.position.set(e.x, (e.h+e.y0)/2, e.z); m.userData.building = b; scene.add(m); pickables.push(m);
+      b.label = labelSprite(b.name, b.code + '  ·  ' + (entry.architect ? entry.architect.replace('arch-','') : 'kit')); b.label.position.set(e.x, e.y0 + e.h + 4.5, e.z); scene.add(b.label);
+      b.outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(e.w+0.6, e.h+e.y0+0.3, e.d+0.6)), new THREE.LineBasicMaterial({ color:C.cyan, transparent:true, opacity:0.95 }));
+      b.outline.position.set(e.x, (e.h+e.y0)/2, e.z); b.outline.visible = false; scene.add(b.outline);
+      b.modelGroup = group;
+      if (entry.project) b.project = entry.project;
+      if (entry.divisions && entry.divisions.length) hireInto(b, entry.divisions);
+    } else { b.model = true; b.modelGroup = group; }
+  }
+  function loadManifest(){
+    if (!window.fetch) return;
+    fetch('build/manifest.json', { cache:'no-store' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(m){
+      if (!m || !m.buildings) return;
+      Object.keys(m.buildings).forEach(function(id){
+        var e = m.buildings[id]; if (!e.lot || !e.gltf) return;
+        fetch(e.gltf, { cache:'no-store' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(g){ if (g) placeModel(id, e, g); }).catch(function(){});
+      });
+      var tag = document.querySelector('#top .tag'); if (tag) tag.textContent = 'Models from city/build · jobs, stats and traffic simulated';
+    }).catch(function(){});
+  }
+  loadManifest();
+
   // ---------------- data traffic ----------------
   var MAXP = 160, pulses = [];
-  var pulseMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), MAXP);
-  for (var p=0;p<MAXP;p++){ var dir = pick(DIRS); pulses.push({ kx:irand(0,N), kz:irand(0,N), dx:dir[0], dz:dir[1], t:rng()*PITCH, v:rand(14,24), c: rng()<0.12 ? C.mag : (rng()<0.1 ? C.amber : C.cyan) }); CL.setHex(pulses[p].c); pulseMesh.setColorAt(p, CL); }
-  pulseMesh.instanceColor.needsUpdate = true; scene.add(pulseMesh);
+  var capGeo = new THREE.SphereGeometry(0.5, 10, 8);
+  var pulseMesh = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), MAXP);
+  var haloMesh  = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.14, blending:THREE.AdditiveBlending, depthWrite:false }), MAXP);
+  for (var p=0;p<MAXP;p++){ var dir = pick(DIRS); pulses.push({ kx:irand(0,N), kz:irand(0,N), dx:dir[0], dz:dir[1], t:rng()*PITCH, v:rand(14,24), c: rng()<0.12 ? C.mag : (rng()<0.1 ? C.amber : C.cyan) }); CL.setHex(pulses[p].c); pulseMesh.setColorAt(p, CL); haloMesh.setColorAt(p, CL); }
+  pulseMesh.instanceColor.needsUpdate = haloMesh.instanceColor.needsUpdate = true; pulseMesh.userData.glow = haloMesh.userData.glow = true; scene.add(pulseMesh); scene.add(haloMesh);
+  function pulsePos(q){ return [ sc(q.kx) + q.dx*q.t + (q.dz !== 0 ? -q.dz*0.55 : 0), sc(q.kz) + q.dz*q.t + (q.dx !== 0 ? q.dx*0.55 : 0) ]; }
   function valid(kx,kz){ return kx>=0 && kx<=N && kz>=0 && kz<=N; }
   function stepPulse(q, dt){
     q.t += q.v*dt;
@@ -587,13 +875,45 @@
   var trafficLevel = 0.6;
 
   // ---------------- agents: commute ----------------
-  var bodyMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({ color:0xffffff }), NA);
-  var headMesh = new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color:0xffffff }), NA);
-  agents.forEach(function(a,k){ CL.setHex(a.skin); bodyMesh.setColorAt(k, CL); CL.setHex(a.visor); headMesh.setColorAt(k, CL); });
-  bodyMesh.instanceColor.needsUpdate = true; headMesh.instanceColor.needsUpdate = true; bodyMesh.castShadow = true;
-  scene.add(bodyMesh); scene.add(headMesh);
+  // avatar = torso, head, visor, two legs, two arms, backpack light — all instanced, posed per frame
+  var cGeo = new THREE.BoxGeometry(1,1,1);
+  var PARTS = {
+    torso:{ geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[0,0.86,0], size:[0.52,0.62,0.34], color:function(a){ return shade(a.visor, 0.55); }, shadow:true },
+    head: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[0,1.42,0], size:[0.42,0.40,0.40], color:function(a){ return css(a.skin); } },
+    hair: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[0,1.60,-0.02], size:[0.46,0.12,0.44], color:function(){ return '#2b2230'; } },
+    visor:{ geo:cGeo, mat:new THREE.MeshBasicMaterial({ color:0xffffff }), off:[0,1.44,0.19], size:[0.40,0.11,0.06], color:function(a){ return css(a.visor); } },
+    legL: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[-0.13,0.28,0], size:[0.2,0.56,0.24], color:function(){ return '#1c1f2c'; }, swing:1 },
+    legR: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[ 0.13,0.28,0], size:[0.2,0.56,0.24], color:function(){ return '#1c1f2c'; }, swing:-1 },
+    armL: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[-0.35,0.84,0], size:[0.14,0.5,0.2], color:function(a){ return shade(a.visor, 0.55); }, swing:-1 },
+    armR: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[ 0.35,0.84,0], size:[0.14,0.5,0.2], color:function(a){ return shade(a.visor, 0.55); }, swing:1 },
+    pack: { geo:cGeo, mat:new THREE.MeshLambertMaterial({ color:0xffffff }), off:[0,0.92,-0.24], size:[0.3,0.36,0.14], color:function(){ return '#2a2f3e'; } },
+    packLed:{ geo:cGeo, mat:new THREE.MeshBasicMaterial({ color:0xffffff }), off:[0,1.02,-0.32], size:[0.08,0.08,0.04], color:function(a){ return css(a.visor); } }
+  };
+  var partMeshes = {};
+  Object.keys(PARTS).forEach(function(k){
+    var pt = PARTS[k], m = new THREE.InstancedMesh(pt.geo, pt.mat, NA);
+    agents.forEach(function(a,i){ CL.set(pt.color(a)); m.setColorAt(i, CL); });
+    m.instanceColor.needsUpdate = true; if (pt.shadow) m.castShadow = true; if (k === 'visor' || k === 'packLed') m.userData.glow = true; scene.add(m); partMeshes[k] = m;
+  });
+  var bodyMesh = partMeshes.torso;                                       // picking target
+  var BASE = new THREE.Matrix4(), LOCAL = new THREE.Matrix4(), QX = new THREE.Quaternion(), XAX = new THREE.Vector3(1,0,0);
+  function poseAgent(i, x, z, yaw, swing, bob, hidden){
+    if (hidden){ Object.keys(partMeshes).forEach(function(k){ partMeshes[k].setMatrixAt(i, HIDE); }); return; }
+    P.set(x, bob, z); Q.setFromAxisAngle(UPV, yaw); Sc.set(1,1,1); BASE.compose(P, Q, Sc);
+    Object.keys(PARTS).forEach(function(k){
+      var pt = PARTS[k], sw = pt.swing ? swing*pt.swing : 0;
+      if (sw){ // rotate about the hip/shoulder (top of the part)
+        var top = pt.off[1] + pt.size[1]/2;
+        P.set(pt.off[0], top, pt.off[2]); QX.setFromAxisAngle(XAX, sw); Sc.set(1,1,1); LOCAL.compose(P, QX, Sc);
+        M.makeTranslation(0, -pt.size[1]/2, 0); LOCAL.multiply(M);
+        M.makeScale(pt.size[0], pt.size[1], pt.size[2]); LOCAL.multiply(M);
+      } else { P.set(pt.off[0], pt.off[1], pt.off[2]); Q.identity(); Sc.set(pt.size[0], pt.size[1], pt.size[2]); LOCAL.compose(P, Q, Sc); }
+      M.multiplyMatrices(BASE, LOCAL); partMeshes[k].setMatrixAt(i, M);
+    });
+  }
+  function flushAgents(){ Object.keys(partMeshes).forEach(function(k){ partMeshes[k].instanceMatrix.needsUpdate = true; }); }
   var selRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 32), new THREE.MeshBasicMaterial({ color:C.cyan, side:THREE.DoubleSide }));
-  selRing.rotation.x = -Math.PI/2; selRing.visible = false; scene.add(selRing);
+  selRing.rotation.x = -Math.PI/2; selRing.visible = false; selRing.userData.glow = true; scene.add(selRing);
 
   function validA(kx,kz){ return kx>=AK0 && kx<=AK1 && kz>=AK0 && kz<=AK1; }
   function wanderNext(a){
@@ -617,7 +937,7 @@
     a.queue = pathNodes(a.next, a.building.door);
     a.task = pick(TASKS[a.role] || ['Assigned task']);
     a.toolTimer = rand(1.5, 3);
-    logEvent(a.building, 'dispatch', '<b>' + esc(a.name) + '</b> dispatched · ' + esc(a.task));
+    logEvent(a.building, 'dispatch', '<b>' + esc(a.name) + '</b> dispatched · ' + esc(a.task), a);
     return true;
   }
   function dispatchOne(){ var home = agents.filter(function(a){ return a.state==='home'; }); if (!home.length) return; dispatch(home[Math.floor(Math.random()*home.length)]); }
@@ -628,14 +948,14 @@
         a.toolTimer = rand(2, 5);
         if (rng() < 0.5) a.tools++; else a.calls = Math.min(a.allowance, a.calls + 1);
         var line = pick(TOOLLINES)(a);
-        logEvent(a.building, 'tool', esc(a.name) + ' · ' + line);
+        logEvent(a.building, 'tool', esc(a.name) + ' · ' + line, a);
         floorOnTool(a, line.indexOf('FAIL') >= 0 ? 'fail' : 'tool');
         if (involves(a)) refreshPanel();
       }
       if (a.timer <= 0){
         var ok = rng() < 0.85;
         a.state = 'return'; a.building.inside--; if (ok) a.jobs++; else a.blocked++;
-        logEvent(a.building, ok ? 'done' : 'fail', '<b>' + esc(a.name) + '</b> ' + (ok ? 'finished' : 'blocked') + ' · ' + esc(a.task || ''));
+        logEvent(a.building, ok ? 'done' : 'fail', '<b>' + esc(a.name) + '</b> ' + (ok ? 'finished' : 'blocked') + ' · ' + esc(a.task || ''), a);
         floorOnTool(a, ok ? 'done' : 'fail'); floorOnLeave(a);
         a.task = null;
         a.node = a.building.door.slice(); var path = pathNodes(a.node, a.homeDoor);
@@ -645,14 +965,21 @@
       }
       return;
     }
+    // watch out for the data: a capsule zipping past makes them stop and hop
+    a.dodgeCd = (a.dodgeCd || 0) - dt;
+    if (!REDUCED && a.dodgeCd <= 0){
+      var ap = agentPos(a), live = Math.round(MAXP*trafficLevel);
+      for (var pi=0; pi<live; pi++){ var pp = pulsePos(pulses[pi]), ddx = pp[0]-ap[0], ddz = pp[1]-ap[1]; if (ddx*ddx + ddz*ddz < 2.1){ a.wait = Math.max(a.wait, 0.5); a.dodge = 0.5; a.dodgeCd = 3; a.facePulse = Math.atan2(ddx, ddz); break; } }
+    }
     if (a.wait > 0){ a.wait -= dt; return; }
+    a.facePulse = undefined;
     a.t += a.v*dt;
     while (a.t >= PITCH){
       a.t -= PITCH; a.node = a.next;
       if (a.queue.length){ a.next = a.queue.shift(); continue; }
       if (a.state === 'commute'){
         a.state = 'work'; a.timer = rand(12,30); a.building.inside++;
-        logEvent(a.building, 'arrive', '<b>' + esc(a.name) + '</b> at desk · F' + (a.divIdx+1) + ' ' + esc(a.division.name));
+        logEvent(a.building, 'arrive', '<b>' + esc(a.name) + '</b> at desk · ' + esc(floorLabel(a)), a);
         if (involves(a)) refreshPanel(); if (cutBuilding === a.building) buildCutaway(a.building, cutFloor);
         floorOnArrive(a);
         return;
@@ -663,7 +990,7 @@
     }
   }
   function agentPos(a){
-    var dx = a.next[0]-a.node[0], dz = a.next[1]-a.node[1], sw = 1.75*a.side;
+    var dx = a.next[0]-a.node[0], dz = a.next[1]-a.node[1], sw = 1.9*a.side;
     return [ sc(a.node[0]) + dx*a.t + (dz !== 0 ? sw : 0), sc(a.node[1]) + dz*a.t + (dx !== 0 ? sw : 0) ];
   }
 
@@ -677,8 +1004,13 @@
     table:new THREE.MeshLambertMaterial({ color:0x6a6f86 }), pot:new THREE.MeshLambertMaterial({ color:0x3a3340 }), leaf:new THREE.MeshLambertMaterial({ color:0x4f9a6a }),
     crate:new THREE.MeshLambertMaterial({ color:0x3b4256 }), tag:new THREE.MeshBasicMaterial({ color:0x55607a })
   };
-  function floorsOf(b){ return Math.max(b.divisions.length, Math.floor(b.env.h/3.4)); }
+  function floorsOf(b){ return b.rooms ? 1 : Math.max(b.divisions.length, Math.floor(b.env.h/3.4)); }
+  function floorDivs(b, f){ return b.rooms ? (f === 0 ? b.divisions : []) : (b.divisions[f] ? [b.divisions[f]] : []); }
+  function floorOf(a){ return a.building.rooms ? 0 : a.divIdx; }
+  function floorLabel(a){ return a.building.rooms ? 'Room · ' + a.division.name : 'F' + (a.divIdx+1) + ' ' + a.division.name; }
+  function floorRoster(b, f){ var offices = 0, agents = []; floorDivs(b, f).forEach(function(d){ for (var o=0;o<d.offices;o++) agents.push(d.agents[o] || null); offices += d.offices; }); return { offices:offices, agents:agents }; }
   function setRange(b, hide){
+    if (b.modelGroup) b.modelGroup.visible = !hide;
     var r = b.range, k;
     for (k=r.b0;k<r.b1;k++) boxMesh.setMatrixAt(k, hide ? HIDE : boxM(boxes[k]));
     for (k=r.w0;k<r.w1;k++) winMesh.setMatrixAt(k, hide ? HIDE : winM(wins[k]));
@@ -711,7 +1043,7 @@
     else if (a) mesh(new THREE.BoxGeometry(0.5*s, 0.05*s, 0.3*s), MAT.tag, x, y + 0.51*s, z + 0.2*s, g);   // name plate, occupant away
   }
   function floorDetail(b, f, y, fh, g){
-    var e = b.env, dv = b.divisions[f];
+    var e = b.env, ro = floorRoster(b, f), dv = ro.offices ? { offices: ro.offices, agents: ro.agents } : null;
     // low perimeter walls with a door gap on the south side
     var wh = Math.min(1.2, fh*0.45);
     mesh(new THREE.BoxGeometry(e.w, wh, 0.12), MAT.wall, e.x, y + wh/2, e.z - e.d/2, g);
@@ -740,8 +1072,8 @@
       slab.position.set(e.x, y, e.z); slab.userData.floor = f; slab.userData.building = b; g.add(slab); floorPick.push(slab);
       if (detail === f){ floorDetail(b, f, y + 0.08, fh, g); continue; }
       if (detail != null) continue;                       // floors under the open one stay bare
-      var dv = b.divisions[f]; if (!dv) continue;
-      deskSlots(e, dv.offices).forEach(function(slot, o){ office(e, y + 0.08, slot, dv.agents[o], g, Math.min(1, fh/3.6)); });
+      var ro = floorRoster(b, f); if (!ro.offices) continue;
+      deskSlots(e, ro.offices).forEach(function(slot, o){ office(e, y + 0.08, slot, ro.agents[o], g, Math.min(1, fh/3.6)); });
     }
     var sh = detail != null ? (detail+1)*fh : e.h;
     var shell = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(e.w, sh, e.d)), new THREE.LineBasicMaterial({ color:C.cyan, transparent:true, opacity:0.6 }));
@@ -765,34 +1097,71 @@
     t3:{ floor:[0x33303f,0x373445], line:0x2c2938, wallTop:0x4a4258, wallFace:0x6a5f7e, name:'office' },
     t4:{ floor:[0x2f3538,0x33393c], line:0x282d30, wallTop:0x3e4649, wallFace:0x5b6568, name:'industrial' }
   };
+  // emergent buildings take a floor palette from their ring; a model's own accent colour tints the walls
+  var RING_STYLE = {
+    Residential:{ floor:[0x3a3547,0x3f3a4d], line:0x312d3e, wallTop:0x4e4766, wallFace:0x6f668e, name:'office' },
+    Commerce:{ floor:[0x2a3345,0x2e374a], line:0x242d3e, wallTop:0x3a4a60, wallFace:0x566a86, name:'office' },
+    Industrial:{ floor:[0x2f3538,0x33393c], line:0x282d30, wallTop:0x3e4649, wallFace:0x5b6568, name:'industrial' }
+  };
+  function styleFor(b){ return STYLE[b.id] || RING_STYLE[b.ring] || RING_STYLE.Commerce; }
   var DIRS4 = [[0,1],[0,-1],[-1,0],[1,0]];
 
   function layoutFloor(b, f){
-    var e = b.env, dv = b.divisions[f];
+    var e = b.env, divs = floorDivs(b, f), dv = divs.length === 1 ? divs[0] : null, multi = divs.length > 1;
     var cols = clamp(Math.round(e.w*1.6), 15, 26), rows = clamp(Math.round(e.d*1.6), 13, 20);
+    if (multi){ cols = Math.max(cols, 26); rows = Math.max(rows, 20); }
     var walk = [], r, c;
     for (r=0;r<rows;r++){ walk.push([]); for (c=0;c<cols;c++) walk[r].push(r>0 && r<rows-1 && c>0 && c<cols-1); }
-    var L = { b:b, f:f, dv:dv, cols:cols, rows:rows, walk:walk, furn:[], desks:[], pois:[], style:STYLE[b.id], agents:[], leds:[] };
+    var L = { b:b, f:f, dv:dv, divs:divs, cols:cols, rows:rows, walk:walk, furn:[], desks:[], pois:[], style:styleFor(b), agents:[], leds:[], rooms:[] };
     function block(c,r,w,h){ for (var yy=r; yy<r+h; yy++) for (var xx=c; xx<c+w; xx++) if (walk[yy]) walk[yy][xx] = false; }
     function put(type,c,r,w,h,extra){ var o = { type:type, c:c, r:r, w:w||1, h:h||1 }; if (extra) for (var k in extra) o[k] = extra[k]; L.furn.push(o); block(c,r,o.w,o.h); return o; }
     // door: two tiles in the south wall, a mat inside
     L.door = { c: Math.floor(cols/2) - 1, r: rows-1 };
     walk[rows-1][L.door.c] = walk[rows-1][L.door.c+1] = true;
     L.furn.push({ type:'mat', c:L.door.c, r:rows-2, w:2, h:1 });
-    if (!dv){
+    if (!divs.length){
       for (var k=0;k<7;k++) put('crate', 2 + (k%4)*2, 2 + Math.floor(k/4)*2, 1, 1);
       put('rack', cols-2, 2, 1, 2); put('rack', cols-2, 4, 1, 2);
       return L;
     }
-    // desks in rows: desk 2x1 with the chair below it
-    var deskCols = Math.max(1, Math.floor((cols - 6)/3)), n = dv.offices;
-    for (var o=0;o<n;o++){
-      var dc = 2 + (o % deskCols)*3, dr = 3 + Math.floor(o/deskCols)*3;
-      if (dr + 1 >= rows-2) break;
-      var d = put('desk', dc, dr, 2, 1, { slot:o, mug: rng()<0.5, paper: rng()<0.5 });
-      var chair = { c:dc, r:dr+1 }; block(chair.c, chair.r, 1, 1);
-      L.desks.push({ c:dc, r:dr, chair:chair, slot:o, agent:dv.agents[o] || null });
+    // desks in rows inside a rectangle: desk 2x1 with the chair below it
+    var slotBase = 0;
+    function desksIn(div, c0, r0, c1, r1){                      // inclusive interior bounds
+      var deskCols = Math.max(1, Math.floor((c1 - c0 - 1)/3));
+      for (var o=0;o<div.offices;o++){
+        var dc = c0 + 1 + (o % deskCols)*3, dr = r0 + 1 + Math.floor(o/deskCols)*3;
+        if (dr + 1 > r1 - 1) break;
+        put('desk', dc, dr, 2, 1, { slot:slotBase+o, mug: rng()<0.5, paper: rng()<0.5 });
+        var chair = { c:dc, r:dr+1 }; block(chair.c, chair.r, 1, 1);
+        L.desks.push({ c:dc, r:dr, chair:chair, slot:slotBase+o, agent:div.agents[o] || null, div:div });
+      }
+      slotBase += div.offices;
     }
+    if (multi){
+      // one floor of rooms: a cross-shaped corridor from the door, walls between, a door gap into each room
+      var cc = L.door.c, rc = Math.floor(rows/2) - 1, k2 = divs.length;
+      var split = k2 > 2;
+      for (r=1;r<rows-1;r++){ if (!(r>=rc && r<=rc+1 && split) ) { put('iwall', cc-1, r, 1, 1); put('iwall', cc+2, r, 1, 1); } }
+      if (split) for (c=1;c<cols-1;c++){ if (!(c>=cc && c<=cc+1)) { put('iwall', c, rc-1, 1, 1); put('iwall', c, rc+2, 1, 1); } }
+      var quads = split
+        ? [ [1, 1, cc-2, rc-2], [cc+3, 1, cols-2, rc-2], [1, rc+3, cc-2, rows-2], [cc+3, rc+3, cols-2, rows-2] ]
+        : [ [1, 1, cc-2, rows-2], [cc+3, 1, cols-2, rows-2] ];
+      quads.forEach(function(q, i){
+        var div = divs[i], west = q[0] === 1, north = q[1] === 1;
+        // door gap in the corridor-facing wall, mid-height
+        var gr = north && split ? q[3] + 1 : (split ? q[1] - 1 : null), gc = west ? q[2] + 1 : q[0] - 1;
+        var mid = Math.floor((q[1] + q[3])/2);
+        [mid, mid+1].forEach(function(rr){ L.furn = L.furn.filter(function(o){ return !(o.type==='iwall' && o.c===gc && o.r===rr); }); walk[rr][gc] = true; });
+        if (!div){ put('table', q[0]+2, q[1]+2, 1, 1); put('seat', q[0]+1, q[1]+2, 1, 1); put('seat', q[0]+3, q[1]+2, 1, 1); put('plant', q[2], q[3], 1, 1); L.rooms.push({ q:q, name:'Break room' }); return; }
+        L.rooms.push({ q:q, name:div.name, div:div });
+        put('whiteboard', q[0]+1, north ? 0 : q[1]-1, 3, 1); L.pois.push({ c:q[0]+2, r:q[1], kind:'board', div:div });
+        put('plant', q[2], q[3], 1, 1);
+        desksIn(div, q[0]-1, q[1]-1, q[2]+1, q[3]+1);
+      });
+      L.pois.push({ c:cc, r:rows-3, kind:'lobby' });
+      return L;
+    }
+    desksIn(dv, 1, 2, cols-5, rows-2);
     // fixtures by division type
     var wb = put('whiteboard', 2, 0, 3, 1); L.pois.push({ c:3, r:1, kind:'board' });
     var isLib = b.id === 'u2';
@@ -851,8 +1220,11 @@
         case 'seat': g.fillStyle = '#3a4058'; g.fillRect(x+4, y+4, 8, 8); g.fillStyle = '#4a5270'; g.fillRect(x+5, y+5, 6, 3); break;
         case 'printer': g.fillStyle = '#9aa3b6'; g.fillRect(x+2, y+4, T-4, 9); g.fillStyle = '#e6e9f2'; g.fillRect(x+4, y+2, 8, 3); g.fillStyle = '#7dffb0'; g.fillRect(x+11, y+6, 2, 1); break;
         case 'crate': g.fillStyle = '#3b4256'; g.fillRect(x+2, y+2, T-4, T-4); g.fillStyle = '#4c5470'; g.fillRect(x+3, y+3, T-6, 2); g.fillStyle = '#2c3348'; g.fillRect(x+2, y+8, T-4, 1); break;
+        case 'iwall': g.fillStyle = shade(s.wallTop, 1.3); g.fillRect(x, y, T, T); g.fillStyle = shade(s.wallFace, 1.3); g.fillRect(x+2, y+4, T-4, T-6); g.fillStyle = shade(s.wallTop, 1.7); g.fillRect(x, y, T, 2); break;
       }
     });
+    // room names on the floor
+    if (L.rooms.length){ g.font = '600 7px "IBM Plex Mono", monospace'; g.textBaseline = 'top'; g.textAlign = 'left'; L.rooms.forEach(function(rm){ g.fillStyle = 'rgba(238,242,236,0.55)'; g.fillText(rm.name.toUpperCase(), rm.q[0]*T + 3, rm.q[3]*T + 8); }); }
     // chairs
     L.desks.forEach(function(d){ var x = d.chair.c*T, y = d.chair.r*T; g.fillStyle = '#2c3348'; g.fillRect(x+4, y+3, 8, 9); g.fillStyle = '#3a4058'; g.fillRect(x+5, y+4, 6, 6); });
     return cv;
@@ -908,13 +1280,13 @@
       walkTo(L, fa, fa.desk.chair); fa.face = 1;
     }
   }
-  function floorOnArrive(a){ var ctx = floorCtx(); if (!FL || !ctx || ctx.b !== a.building || a.divIdx !== ctx.f) return; if (!FL.agents.some(function(o){ return o.a === a; })) spawnAgent(FL, a, true); }
+  function floorOnArrive(a){ var ctx = floorCtx(); if (!FL || !ctx || ctx.b !== a.building || floorOf(a) !== ctx.f) return; if (!FL.agents.some(function(o){ return o.a === a; })) spawnAgent(FL, a, true); }
   function floorOnLeave(a){ if (!FL) return; var fa = FL.agents.filter(function(o){ return o.a === a; })[0]; if (!fa) return; fa.leaving = true; walkTo(FL, fa, { c:FL.door.c, r:FL.door.r }); }
   function floorOnTool(a, kind){ if (!FL) return; var fa = FL.agents.filter(function(o){ return o.a === a; })[0]; if (fa) fa.bubble = { kind:kind, t:1.4 }; }
 
   function buildFloorScene(b, f){
     FL = layoutFloor(b, f); FL.static = paintStatic(FL);
-    if (FL.dv) FL.dv.agents.forEach(function(a){ if (a && a.state === 'work') spawnAgent(FL, a, false); });
+    FL.divs.forEach(function(dv){ dv.agents.forEach(function(a){ if (a && a.state === 'work') spawnAgent(FL, a, false); }); });
     FL.buf = document.createElement('canvas'); FL.buf.width = FL.cols*T; FL.buf.height = FL.rows*T; FL.g = FL.buf.getContext('2d');
   }
   function setFloorMode(on){
@@ -971,7 +1343,7 @@
     fctx.drawImage(L.buf, L.blit.x, L.blit.y, W*sc2, H*sc2);
     // caption
     fctx.fillStyle = '#8e97ad'; fctx.font = '500 ' + Math.round(11*(fc.width/(stage.clientWidth||1))) + 'px "IBM Plex Mono", monospace';
-    fctx.fillText((L.b.code + '  ·  F' + (L.f+1) + '  ·  ' + (L.dv ? L.dv.name : 'unassigned')).toUpperCase(), L.blit.x, L.blit.y - 8);
+    fctx.fillText((L.b.code + '  ·  ' + (L.b.rooms ? 'GROUND FLOOR · ' + L.divs.length + ' ROOMS' : 'F' + (L.f+1) + '  ·  ' + (L.dv ? L.dv.name : 'unassigned'))).toUpperCase(), L.blit.x, L.blit.y - 8);
   }
   function pickFloor(cx, cy){
     var L = FL; if (!L || !L.blit) return null;
@@ -991,36 +1363,46 @@
   function renderBuilding(b){
     var assigned = 0, offices = 0; b.divisions.forEach(function(d){ offices += d.offices; d.agents.forEach(function(a){ if (a) assigned++; }); });
     var floors = floorsOf(b), html = '';
-    for (var f=floors-1; f>=0; f--){
+    if (b.rooms){
+      b.divisions.forEach(function(d){
+        var chips = ''; for (var o=0;o<d.offices;o++) chips += chip(d.agents[o]);
+        html += '<div class="floor" data-floor="0" role="button" tabindex="0"><span class="fno">RM</span><span><b>'+esc(d.name)+' <span class="open">open ↗</span></b><div class="chips">'+chips+'</div></span></div>';
+      });
+    }
+    for (var f=floors-1; f>=0 && !b.rooms; f--){
       var d = b.divisions[f];
       if (!d){ html += '<div class="floor empty" data-floor="'+f+'" role="button" tabindex="0"><span class="fno">F'+(f+1)+'</span><b>Unassigned floor <span class="open">open ↗</span></b></div>'; continue; }
       var chips = ''; for (var o=0;o<d.offices;o++) chips += chip(d.agents[o]);
       html += '<div class="floor" data-floor="'+f+'" role="button" tabindex="0"><span class="fno">F'+(f+1)+'</span><span><b>'+esc(d.name)+' <span class="open">open ↗</span></b><div class="chips">'+chips+'</div></span></div>';
     }
     return '<div class="eyebrow">Building · '+b.code+' · '+b.ring+' ring</div><h1>'+esc(b.name)+'</h1><p>'+esc(b.purpose)+'</p>'
-      + '<div class="kv"><div><i>Inside now</i><b>'+b.inside+'</b></div><div><i>Assigned</i><b>'+assigned+' / '+offices+'</b></div><div><i>Floors</i><b>'+floors+'</b></div><div><i>Divisions</i><b>'+b.divisions.length+'</b></div></div>'
-      + '<h2 style="margin-top:16px">Floors · click one to walk in</h2><div class="floors">'+html+'</div>'
+      + '<div class="kv"><div><i>Inside now</i><b>'+b.inside+'</b></div><div><i>Assigned</i><b>'+assigned+' / '+offices+'</b></div><div><i>'+(b.rooms?'Floors':'Floors')+'</i><b>'+floors+'</b></div><div><i>'+(b.rooms?'Rooms':'Divisions')+'</i><b>'+b.divisions.length+'</b></div></div>'
+      + '<h2 style="margin-top:16px">'+(b.rooms ? 'Rooms · one floor · click to walk in' : 'Floors · click one to walk in')+'</h2><div class="floors">'+html+'</div>'
       + '<p class="note">Floors are divisions; desks are offices. A lit monitor and a seated avatar mean the agent is working there now. A name plate means assigned but away.</p>';
   }
   function renderFloor(b, f){
-    var d = b.divisions[f], p = b.project;
+    var divs = floorDivs(b, f), d = divs.length === 1 ? divs[0] : null, p = b.project, total = 0;
     var present = 0, assigned = 0, calls = 0, allow = 0, tools = 0, jobs = 0, blocked = 0, rows = '';
-    if (d) for (var o=0;o<d.offices;o++){
-      var a = d.agents[o];
-      if (!a){ rows += '<tr><td class="tk" colspan="4" style="color:var(--line)">desk '+(o+1)+' · vacant</td></tr>'; continue; }
-      assigned++; calls += a.calls; allow += a.allowance; tools += a.tools; jobs += a.jobs; blocked += a.blocked;
-      if (a.state === 'work') present++;
-      rows += '<tr><td><button class="nm" data-agent="'+a.id+'">'+esc(a.name)+'</button><br><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span></td>'
-        + '<td class="tk">'+(a.task ? esc(a.task) : '<span style="opacity:.5">—</span>')+'</td>'
-        + '<td class="num">'+a.calls+'/'+a.allowance+'</td><td class="num">'+esc(a.model.split(' · ')[0])+'</td></tr>';
-    }
+    divs.forEach(function(dv){
+      if (divs.length > 1) rows += '<tr><td colspan="4" style="padding-top:10px"><span class="eyebrow" style="margin:0">'+esc(dv.name)+' · '+esc(dv.role)+'</span></td></tr>';
+      for (var o=0;o<dv.offices;o++){
+        var a = dv.agents[o]; total++;
+        if (!a){ rows += '<tr><td class="tk" colspan="4" style="color:var(--line)">desk '+(o+1)+' · vacant</td></tr>'; continue; }
+        assigned++; calls += a.calls; allow += a.allowance; tools += a.tools; jobs += a.jobs; blocked += a.blocked;
+        if (a.state === 'work') present++;
+        rows += '<tr><td><button class="nm" data-agent="'+a.id+'">'+esc(a.name)+'</button><br><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span></td>'
+          + '<td class="tk">'+(a.task ? esc(a.task) : '<span style="opacity:.5">—</span>')+'</td>'
+          + '<td class="num">'+a.calls+'/'+a.allowance+'</td><td class="num">'+esc(a.model.split(' · ')[0])+'</td></tr>';
+      }
+    });
     var lines = LOG.filter(function(l){ return l.b === b; }).slice(-14).reverse().map(function(l){ return '<li class="'+l.kind+'"><span class="ts">'+l.t+'</span><span>'+l.html+'</span></li>'; }).join('');
-    return '<div class="fhead"><div class="grow"><div class="eyebrow">'+esc(b.name)+' · '+b.code+' · Floor F'+(f+1)+' of '+floorsOf(b)+'</div>'
-      + '<h1>'+(d ? esc(d.name) : 'Unassigned floor')+'</h1>'
-      + (d ? '<p>'+esc(d.role)+' desks · '+b.ring+' ring · top-down plan on the left, scroll to zoom</p>' : '<p>No division lives here yet. Storage until the mayor proposes one and you approve it.</p>')
+    var title = d ? esc(d.name) : (divs.length > 1 ? 'Ground floor · ' + divs.length + ' rooms' : 'Unassigned floor');
+    var sub = d ? esc(d.role)+' desks · '+b.ring+' ring' : (divs.length > 1 ? divs.map(function(x){ return esc(x.name); }).join(' · ') + ' · corridor from the south door' : 'No division lives here yet. Storage until the mayor proposes one and you approve it.');
+    return '<div class="fhead"><div class="grow"><div class="eyebrow">'+esc(b.name)+' · '+b.code+' · '+(b.rooms ? 'One floor' : 'Floor F'+(f+1)+' of '+floorsOf(b))+'</div>'
+      + '<h1>'+title+'</h1><p>'+sub+'</p>'
       + '</div></div>'
       + '<div class="tiles">'
-      + '<div><i>At desk now</i><b>'+present+' <small>/ '+(d ? d.offices : 0)+'</small></b></div>'
+      + '<div><i>At desk now</i><b>'+present+' <small>/ '+total+'</small></b></div>'
       + '<div><i>Assigned</i><b>'+assigned+'</b></div>'
       + '<div><i>Calls used</i><b>'+calls+' <small>/ '+allow+'</small></b></div>'
       + '<div><i>Tool calls</i><b>'+tools+'</b></div>'
@@ -1030,19 +1412,36 @@
       + '<div class="grid2">'
       + '<section class="card proj"><h2>Current project</h2><div class="title">'+esc(p.title)+'</div><div class="meta">'
       + '<span>job</span><span class="mono">'+esc(p.job)+'</span><span>stage</span><span>'+esc(p.stage)+'</span><span>backend</span><span>'+esc(p.backend)+'</span><span>budget</span><span>'+esc(p.budget)+'</span><span>since</span><span>'+esc(p.since)+'</span></div></section>'
-      + '<section class="card"><h2>Who sits here</h2>'+(d ? '<table class="roster"><tbody>'+rows+'</tbody></table>' : '<p>Nobody. Crates.</p>')+'</section>'
+      + '<section class="card"><h2>Who sits here</h2>'+(divs.length ? '<table class="roster"><tbody>'+rows+'</tbody></table>' : '<p>Nobody. Crates.</p>')+'</section>'
       + '<section class="card span2"><h2>Activity · '+esc(b.name)+'</h2>'+(lines ? '<ul class="log">'+lines+'</ul>' : '<p>Quiet. Dispatch a job from the city view and watch this fill.</p>')+'</section>'
       + '</div>'
       + '<p class="note">Everything here maps to a ledger field: calls and tool calls come from <b>tool-calls.sqlite</b>, stage from the job journal, blocked from review verdicts. The room shape is square until the architecture agents exist.</p>';
   }
-  function renderAgent(a){
+  function whereText(a){
     var b = a.building;
-    return '<div class="eyebrow">Agent · '+a.code+'</div><h1>'+esc(a.name)+'</h1><p>'+esc(a.role)+' · <button class="chip" data-building="'+b.id+'">'+esc(b.name)+'</button> · <button class="chip" data-gofloor="'+a.divIdx+'">F'+(a.divIdx+1)+' '+esc(a.division.name)+'</button> · desk '+(a.office+1)+'</p>'
-      + '<div style="margin-bottom:12px"><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span></div>'
-      + (a.task ? '<div class="task">'+esc(a.task)+'</div>' : '<p class="note">No assigned task. Home block '+a.home[0]+','+a.home[1]+'.</p>')
-      + '<div class="kv" style="margin-top:12px"><div><i>Model this run</i><b style="font-size:11.5px" class="mono">'+esc(a.model)+'</b></div><div><i>Calls used</i><b>'+a.calls+' / '+a.allowance+'</b></div><div><i>Tool calls</i><b>'+a.tools+'</b></div><div><i>Jobs done</i><b>'+a.jobs+'</b></div><div><i>Blocked</i><b>'+a.blocked+'</b></div><div><i>Identity</i><b style="font-size:11.5px">stable across models</b></div></div>'
-      + '<div class="row" style="margin-top:12px"><button class="btn primary" id="dispatchSel" '+(a.state!=='home'?'disabled':'')+'>Dispatch to work</button><label class="tog"><input type="checkbox" id="followSel" '+(follow?'checked':'')+'> Follow</label></div>'
-      + '<p class="note">Identity, history and permissions belong to the agent. The model is per run.</p>';
+    if (a.state === 'home') return 'At home · residential ring, block ' + a.home[0] + ',' + a.home[1];
+    if (a.state === 'commute') return 'Walking to ' + b.name + ' · ' + (a.queue.length + 1) + ' blocks to go';
+    if (a.state === 'work') return 'Inside ' + b.name + ' · ' + floorLabel(a) + ' · desk ' + (a.office+1);
+    return 'Walking home · ' + (a.queue.length + 1) + ' blocks to go';
+  }
+  function renderAgent(a){
+    var b = a.building, wide = view.from && view.from.kind === 'overview';
+    var lines = LOG.filter(function(l){ return l.a === a; }).slice(-10).reverse().map(function(l){ return '<li class="'+l.kind+'"><span class="ts">'+l.t+'</span><span>'+l.html+'</span></li>'; }).join('');
+    var head = '<div class="eyebrow">Agent · '+a.code+' · '+esc(a.role)+'</div><h1>'+esc(a.name)+'</h1>'
+      + '<div class="where"><span class="pill '+a.state+'">'+stateLabel(a.state)+'</span><span>'+esc(whereText(a))+'</span></div>'
+      + (a.task ? '<div class="task">'+esc(a.task)+'</div>' : '<p class="note">No assigned task right now.</p>');
+    var tiles = '<div class="tiles" style="margin-top:12px"><div><i>Calls used</i><b>'+a.calls+' <small>/ '+a.allowance+'</small></b></div><div><i>Tool calls</i><b>'+a.tools+'</b></div><div><i>Jobs done</i><b>'+a.jobs+'</b></div><div><i>Blocked</i><b style="color:'+(a.blocked?'var(--mag)':'inherit')+'">'+a.blocked+'</b></div></div>';
+    var kv = '<div class="kv" style="margin-top:12px">'
+      + '<div><i>Works at</i><b><button class="chip" data-building="'+b.id+'">'+esc(b.name)+'</button></b></div>'
+      + '<div><i>'+(b.rooms?'Room':'Division')+' · desk</i><b><button class="chip" data-gofloor="'+floorOf(a)+'">'+esc(floorLabel(a))+'</button> · '+(a.office+1)+'</b></div>'
+      + '<div><i>Model this run</i><b style="font-size:11.5px" class="mono">'+esc(a.model)+'</b></div>'
+      + '<div><i>Identity</i><b style="font-size:11.5px">stable across models</b></div>'
+      + '<div><i>Home</i><b>block '+a.home[0]+','+a.home[1]+'</b></div>'
+      + '<div><i>Allowance</i><b>'+a.allowance+' calls</b></div></div>';
+    var actions = '<div class="row" style="margin-top:12px"><button class="btn primary" id="dispatchSel" '+(a.state!=='home'?'disabled':'')+'>Dispatch to work</button></div>';
+    var log = '<section class="card" style="margin-top:14px"><h2>Recent · '+esc(a.name)+'</h2>'+(lines ? '<ul class="log">'+lines+'</ul>' : '<p>Nothing logged yet. Dispatch them and watch.</p>')+'</section>';
+    var note = '<p class="note">Identity, history and permissions belong to the agent. The model is per run.</p>';
+    return wide ? head + tiles + kv + actions + log + note : head + tiles + kv + actions + note;
   }
   function refreshPanel(){
     if (view.kind === 'overview'){ overviewEl.hidden = false; inspectEl.hidden = true; return; }
@@ -1053,34 +1452,64 @@
   }
   function selectBuilding(b){
     view = { kind:'building', b:b }; selected = null; follow = false; selRing.visible = false;
-    setFloorMode(false);
+    setFloorMode(false); setChase(false);
     buildCutaway(b, null);
     target.set(b.env.x, b.env.y0 + b.env.h*0.35, b.env.z); want.r = Math.max(60, b.env.h*2.2); want.ph = 0.86;
     refreshPanel();
   }
   function selectFloor(b, f){
-    view = { kind:'floor', b:b, f:f }; selected = null; follow = false; selRing.visible = false;
+    view = { kind:'floor', b:b, f:f }; selected = null; follow = false; selRing.visible = false; setChase(false);
     if (cutBuilding !== b || cutFloor !== null) buildCutaway(b, null);   // city keeps the whole stack for when we come back
     setFloorMode(true); buildFloorScene(b, f);
     refreshPanel();
   }
+  // ---- chase camera: in front of the agent, looking back at them ----
+  var chase = false, chaseSnap = false, chaseTheta = 0, chaseDist = 9, chaseLook = new THREE.Vector3(), chaseSaved = null, lastDir = [0,1];
+  function setChase(on){
+    if (chase === on) return;
+    chase = on; document.getElementById('app').classList.toggle('agentmode', on);
+    if (on){ chaseSaved = { t:target.clone(), r:want.r, th:want.th, ph:want.ph }; chaseTheta = 0; chaseDist = 9; }
+    else if (chaseSaved){ target.copy(chaseSaved.t); want.r = chaseSaved.r; want.th = chaseSaved.th; want.ph = chaseSaved.ph; cur.r = want.r; cur.th = want.th; cur.ph = want.ph; chaseSaved = null; }
+    resize();
+  }
+  function updateChase(){
+    var a = selected; if (!a) return;
+    var px, pz, lx, ly, lz, ang;
+    if (a.state === 'work'){                                            // inside: hold at the building's door, looking at the façade
+      var e = a.building.env; px = sc(a.building.door[0]) + PITCH/2; pz = sc(a.building.door[1]);
+      lx = e.x; ly = e.y0 + Math.min(e.h*0.35, 12); lz = e.z;
+      ang = Math.atan2(px - lx, pz - lz) + chaseTheta;
+      var d2 = Math.max(chaseDist*2.2, 18);
+      P.set(lx + Math.sin(ang)*d2, 2 + d2*0.35, lz + Math.cos(ang)*d2);
+    } else {
+      var pos = agentPos(a), dx = a.next[0]-a.node[0], dz = a.next[1]-a.node[1];
+      if (dx || dz) lastDir = [dx, dz];
+      px = pos[0]; pz = pos[1]; lx = px; ly = 1.1; lz = pz;
+      ang = Math.atan2(lastDir[0], lastDir[1]) + chaseTheta;             // in front = along their heading
+      P.set(px + Math.sin(ang)*chaseDist, 1.0 + chaseDist*0.42, pz + Math.cos(ang)*chaseDist);
+    }
+    if (chaseSnap){ camera.position.copy(P); chaseLook.set(lx, ly, lz); chaseSnap = false; }
+    else { camera.position.lerp(P, 0.09); chaseLook.lerp(new THREE.Vector3(lx, ly, lz), 0.14); }
+    camera.lookAt(chaseLook);
+    target.set(lx, 0, lz);
+  }
   function selectAgent(a, from){
     from = from || view; if (from.kind === 'agent') from = from.from;
-    view = { kind:'agent', a:a, from:from }; selected = a;
-    if (from.kind === 'overview'){ setFloorMode(false); clearCutaway(); follow = true; want.r = Math.min(want.r, 70); }
-    else if (from.kind === 'building'){ setFloorMode(false); follow = false; }
-    else follow = false;                                              // from a floor: stay in the floor scene
+    view = { kind:'agent', a:a, from:from }; selected = a; follow = false;
+    if (from.kind === 'overview'){ setFloorMode(false); clearCutaway(); if (!chase) setChase(true); chaseSnap = true; }
+    else if (from.kind === 'building'){ setFloorMode(false); setChase(false); }
+    // from a floor: stay in the floor scene
     selRing.visible = a.state !== 'work';
     refreshPanel();
   }
-  function deselect(){ view = { kind:'overview' }; selected = null; follow = false; selRing.visible = false; setFloorMode(false); clearCutaway(); refreshPanel(); }
+  function deselect(){ view = { kind:'overview' }; selected = null; follow = false; selRing.visible = false; setFloorMode(false); setChase(false); clearCutaway(); refreshPanel(); }
   function back(){
     if (view.kind === 'agent'){ var f = view.from; if (f.kind === 'floor') selectFloor(f.b, f.f); else if (f.kind === 'building') selectBuilding(f.b); else deselect(); }
     else if (view.kind === 'floor') selectBuilding(view.b);
     else deselect();
   }
   backEl.addEventListener('click', back);
-  window.__esperia = { selectBuilding:selectBuilding, selectFloor:selectFloor, selectAgent:selectAgent, back:back, buildings:BUILDINGS, agents:agents, dispatch:dispatchOne, state:function(){ return { view:view.kind, floorMode:floorMode, FL:!!FL, agentsOnFloor: FL ? FL.agents.length : 0 }; } };
+  window.__esperia = { hireInto:hireInto, specs:SPECS, selectBuilding:selectBuilding, selectFloor:selectFloor, selectAgent:selectAgent, back:back, buildings:BUILDINGS, agents:agents, dispatch:dispatchOne, state:function(){ return { view:view.kind, floorMode:floorMode, FL:!!FL, agentsOnFloor: FL ? FL.agents.length : 0 }; } };
   bodyEl.addEventListener('click', function(e){
     var t = e.target.closest('[data-agent]'); if (t){ selectAgent(agents[+t.getAttribute('data-agent')]); return; }
     t = e.target.closest('[data-gofloor]'); if (t){ selectFloor(view.a.building, +t.getAttribute('data-gofloor')); return; }
@@ -1109,7 +1538,7 @@
     if (agentPick.length){ hits = ray.intersectObjects(agentPick); if (hits.length) return { agent: hits[0].object.userData.agent }; }
     if (floorPick.length){ hits = ray.intersectObjects(floorPick); if (hits.length) return cutFloor == null ? { building: hits[0].object.userData.building, floor: hits[0].object.userData.floor } : { noop:true }; }
     hits = ray.intersectObject(bodyMesh);
-    if (hits.length && hits[0].instanceId !== undefined){ var a = agents[hits[0].instanceId]; if (a.state !== 'work') return { agent:a }; }
+    if (hits.length && hits[0].instanceId !== undefined){ var a = agents[hits[0].instanceId]; if (a && !a.reserve && a.state !== 'work') return { agent:a }; }
     hits = ray.intersectObjects(pickables.filter(function(m){ return m.userData.building !== cutBuilding; }));
     if (hits.length) return { building: hits[0].object.userData.building };
     return null;
@@ -1135,6 +1564,7 @@
     if (!drag){ var h = pickAt(e.clientX, e.clientY); e.currentTarget.classList.toggle('pick', !!h); setHover(h && h.building && h.floor === undefined ? h.building : null); return; }
     var dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; moved += Math.abs(dx)+Math.abs(dy);
     if (floorMode) return;                                             // the plan is fixed; only zoom
+    if (chase){ chaseTheta -= dx*0.006; return; }
     if (drag.orbit){ want.th -= dx*0.005; want.ph = Math.max(0.3, Math.min(1.3, want.ph - dy*0.004)); }
     else {
       follow = false;
@@ -1143,62 +1573,79 @@
       var lim = HALF - 20; target.x = Math.max(-lim, Math.min(lim, target.x)); target.z = Math.max(-lim, Math.min(lim, target.z));
     }
   });
-  canvas.addEventListener('wheel', function(e){ e.preventDefault(); want.r = Math.max(30, Math.min(300, want.r * (1 + Math.sign(e.deltaY)*0.09))); }, { passive:false });
+  canvas.addEventListener('wheel', function(e){ e.preventDefault(); if (chase){ chaseDist = Math.max(4, Math.min(30, chaseDist * (1 + Math.sign(e.deltaY)*0.1))); return; } want.r = Math.max(30, Math.min(300, want.r * (1 + Math.sign(e.deltaY)*0.09))); }, { passive:false });
   canvas.addEventListener('touchmove', function(e){ if (e.touches.length !== 2) return; e.preventDefault(); var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) want.r = Math.max(30, Math.min(300, want.r*(pinch/d))); pinch = d; }, { passive:false });
   canvas.addEventListener('touchend', function(){ pinch = 0; });
 
   var trafficEl = document.getElementById('traffic'), trafficV = document.getElementById('trafficV');
   trafficEl.addEventListener('input', function(){ trafficLevel = trafficEl.value/100; trafficV.textContent = trafficEl.value + '%'; });
   document.getElementById('neon').addEventListener('change', function(e){ neonMesh.visible = e.target.checked; });
+  document.getElementById('bloom').addEventListener('change', function(e){ bloomOn = e.target.checked; });
+  var bloomS = document.getElementById('bloomS'), bloomV = document.getElementById('bloomV');
+  bloomS.addEventListener('input', function(){ bloomStrength = +bloomS.value; bloomV.textContent = bloomS.value; });
+  var hourEl = document.getElementById('hour'), hourV = document.getElementById('hourV');
+  document.getElementById('follow').addEventListener('change', function(e){ followClock = e.target.checked; hourEl.disabled = followClock; if (!followClock){ scrubHour = localHour(); hourEl.value = scrubHour; } });
+  hourEl.addEventListener('input', function(){ scrubHour = +hourEl.value; var hh = Math.floor(scrubHour), mm = Math.round((scrubHour-hh)*60); hourV.textContent = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0'); });
   function resize(){
     var w = stage.clientWidth||1, h = stage.clientHeight||1;
     renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix();
+    if (rtG){ rtG.dispose(); rtA.dispose(); rtB.dispose(); rtG = null; }
     var dpr = Math.min(window.devicePixelRatio || 1, 2); fc.width = Math.round(w*dpr); fc.height = Math.round(h*dpr);
   }
   window.addEventListener('resize', resize); resize();
 
   // a few agents already at work so the first look isn't empty
   for (var w0=0; w0<8; w0++){
-    var a0 = agents[w0*7 % NA]; a0.state='work'; a0.timer=rand(10,26); a0.toolTimer = rand(0.5,2.5); a0.building.inside++;
+    var a0 = agents[w0*7 % NA0]; a0.state='work'; a0.timer=rand(10,26); a0.toolTimer = rand(0.5,2.5); a0.building.inside++;
     a0.task = pick(TASKS[a0.role]||['Assigned task']);
-    logEvent(a0.building, 'arrive', '<b>' + esc(a0.name) + '</b> at desk · F' + (a0.divIdx+1) + ' ' + esc(a0.division.name));
+    logEvent(a0.building, 'arrive', '<b>' + esc(a0.name) + '</b> at desk · ' + esc(floorLabel(a0)), a0);
   }
   var jobClock = 3;
 
   // ---------------- loop ----------------
-  var clock = new THREE.Clock();
+  var clock = new THREE.Clock(), tickN = 0;
   function tick(){
     requestAnimationFrame(tick);
     var dt = Math.min(clock.getDelta(), 0.05);
+    var hourNow = followClock ? localHour() : scrubHour;
+    applyTime(hourNow); if ((tickN++ & 3) === 0) updateClock(hourNow);
     if (!REDUCED){ jobClock -= dt; if (jobClock <= 0){ jobClock = rand(2.5, 6); if (Math.random() < 0.8) dispatchOne(); } }
 
     var live = Math.round(MAXP*trafficLevel);
     for (var p=0;p<MAXP;p++){
       var q = pulses[p];
-      if (p >= live){ pulseMesh.setMatrixAt(p, HIDE); continue; }
+      if (p >= live){ pulseMesh.setMatrixAt(p, HIDE); haloMesh.setMatrixAt(p, HIDE); continue; }
       if (!REDUCED) stepPulse(q, dt);
-      var x = sc(q.kx) + q.dx*q.t + (q.dz !== 0 ? -q.dz : 0), z = sc(q.kz) + q.dz*q.t + (q.dx !== 0 ? q.dx : 0);
-      P.set(x, 0.05, z); Sc.set(q.dx ? 1.6 : 0.7, 0.32, q.dx ? 0.7 : 1.6); Q.identity(); pulseMesh.setMatrixAt(p, M.compose(P,Q,Sc));
+      var pp = pulsePos(q);
+      P.set(pp[0], 0.42, pp[1]); Sc.set(q.dx ? 2.2 : 0.7, 0.6, q.dx ? 0.7 : 2.2); Q.identity(); pulseMesh.setMatrixAt(p, M.compose(P,Q,Sc));
+      Sc.multiplyScalar(2.1); haloMesh.setMatrixAt(p, M.compose(P,Q,Sc));
     }
-    pulseMesh.instanceMatrix.needsUpdate = true;
+    pulseMesh.instanceMatrix.needsUpdate = haloMesh.instanceMatrix.needsUpdate = true;
 
     var walk = clock.elapsedTime;
     for (var g2=0; g2<NA; g2++){
       var a = agents[g2];
+      if (a.reserve){ poseAgent(g2, 0, 0, 0, 0, 0, true); continue; }
       if (!REDUCED) stepAgent(a, dt);
-      if (a.state === 'work'){ P.set(0,-20,0); Sc.set(0.001,0.001,0.001); Q.identity(); M.compose(P,Q,Sc); bodyMesh.setMatrixAt(g2, M); headMesh.setMatrixAt(g2, M); continue; }
-      var pos = agentPos(a);
-      var bob = (a.wait > 0 || REDUCED) ? 0 : Math.abs(Math.sin(walk*9 + g2))*0.08;
-      P.set(pos[0], bob, pos[1]); Sc.set(0.5, 0.95, 0.42); Q.identity(); bodyMesh.setMatrixAt(g2, M.compose(P,Q,Sc));
-      P.set(pos[0], 0.95 + bob, pos[1]); Sc.set(0.44, 0.36, 0.4); headMesh.setMatrixAt(g2, M.compose(P,Q,Sc));
+      if (a.state === 'work'){ poseAgent(g2, 0, 0, 0, 0, 0, true); continue; }
+      var pos = agentPos(a), moving = a.wait <= 0 && !REDUCED;
+      if (moving) a.anim = (a.anim || 0) + dt * a.v * 3.2;
+      var swing = moving ? Math.sin(a.anim) * 0.75 : 0;
+      var bob = moving ? Math.abs(Math.cos(a.anim)) * 0.05 : 0;
+      if (a.dodge > 0){ a.dodge -= dt; bob += Math.sin(Math.min(1, a.dodge/0.35)*Math.PI) * 0.35; }   // the hop
+      var yaw = a.yaw === undefined ? 0 : a.yaw, dxx = a.next[0]-a.node[0], dzz = a.next[1]-a.node[1];
+      if (dxx || dzz) yaw = Math.atan2(dxx, dzz);
+      if (a.facePulse !== undefined && a.wait > 0) yaw = a.facePulse;
+      a.yaw = yaw;
+      poseAgent(g2, pos[0], pos[1], yaw, swing, bob, false);
       if (selected === a){ selRing.position.set(pos[0], 0.04, pos[1]); if (follow){ target.x += (pos[0]-target.x)*0.08; target.z += (pos[1]-target.z)*0.08; target.y += (0-target.y)*0.08; } }
     }
-    bodyMesh.instanceMatrix.needsUpdate = true; headMesh.instanceMatrix.needsUpdate = true;
+    flushAgents();
     if (selected && !selected.divisions && selected.state === 'work'){ selRing.visible = false; if (follow){ var e = selected.building.env; target.x += (e.x-target.x)*0.06; target.z += (e.z-target.z)*0.06; } } else if (selected && !selected.divisions) selRing.visible = true;
 
-    cur.r += (want.r-cur.r)*0.12; cur.th += (want.th-cur.th)*0.16; cur.ph += (want.ph-cur.ph)*0.16;
-    applyCamera();
-    if (floorMode) paintFloor(dt, walk); else renderer.render(scene, camera);
+    if (chase) updateChase();
+    else { cur.r += (want.r-cur.r)*0.12; cur.th += (want.th-cur.th)*0.16; cur.ph += (want.ph-cur.ph)*0.16; applyCamera(); }
+    if (floorMode) paintFloor(dt, walk); else if (bloomOn) renderWithBloom(); else { renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); }
   }
   tick();
 

@@ -22,9 +22,12 @@ from esperia.execution import OutputValidationError, StageRunner
 from esperia.followup_research import run_followup
 from esperia.ledger import Ledger, PolicyError
 from esperia.llama import LlamaProvider
+from esperia.notebook import NotebookError
+from esperia.notebook_cli import add_library_commands, run_library
 from esperia.ollama import OllamaProvider
 from esperia.owner import inspect_job
 from esperia.provider import ProviderFailure
+from esperia.question_assistant import frame_question
 from esperia.repair import plan_repair, repair_sources, run_repair
 from esperia.research import SYSTEM, run_research
 from esperia.search import check_search_configuration, search_runtime
@@ -104,6 +107,14 @@ def main() -> None:
         help="Validated JSON settings; otherwise ESPERIA_CONFIG or workspace esperia.json",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    add_library_commands(commands)
+    question = commands.add_parser(
+        "question", help="Develop a research question with the research guide"
+    )
+    question.add_argument("message")
+    question.add_argument("--continue", dest="note_id")
+    question.add_argument("--collection", action="append", default=[])
+    question.add_argument("--backend", choices=["codex", "ollama", "llama"])
     commands.add_parser("config", help="Print resolved public configuration")
     commands.add_parser("jobs", help="List persistent jobs")
     doctor = commands.add_parser(
@@ -287,6 +298,12 @@ def main() -> None:
             settings = settings.model_copy(
                 update={"backend": args.backend, "mode": args.mode}
             )
+        if args.command == "question":
+            if args.backend not in {"codex", "ollama", "llama"}:
+                raise ConfigurationError(
+                    "Question preparation requires a standalone --backend: codex, ollama or llama"
+                )
+            settings = settings.model_copy(update={"backend": args.backend})
         if getattr(args, "sources", None):
             args.sources = workspace / args.sources
         if getattr(args, "archive", None):
@@ -294,13 +311,32 @@ def main() -> None:
         if args.command == "config":
             print(settings.model_dump_json(indent=2))
             return
+        if args.command == "library":
+            run_library(args, settings, workspace)
+            return
         ledger = Ledger(
             settings.database or settings.data_root / "jobs.sqlite",
             settings.monthly_cents,
             settings.job_cents,
             settings,
         )
-        if args.command == "doctor":
+        if args.command == "question":
+            provider, reviewer = research_providers(args.backend, settings)
+            try:
+                result = frame_question(
+                    ledger,
+                    settings,
+                    provider,
+                    args.message,
+                    note_id=args.note_id,
+                    collections=args.collection,
+                )
+                print(json.dumps(result, indent=2))
+            finally:
+                provider.close()
+                if reviewer:
+                    reviewer.close()
+        elif args.command == "doctor":
             provider, reviewer = research_providers(args.backend, settings)
             print(
                 json.dumps(
@@ -627,12 +663,18 @@ def main() -> None:
                 if reviewer:
                     reviewer.close()
     except ValidationError:
+        if args.command == "library":
+            parser.exit(
+                2,
+                "Invalid notebook input: check note/link field names, types and bounds.\n",
+            )
         parser.exit(
             2,
             "Invalid configuration: check field names, types and bounds in your settings/profile.\n",
         )
     except (
         ConfigurationError,
+        NotebookError,
         LoopError,
         PolicyError,
         OutputValidationError,

@@ -1,0 +1,8 @@
+[mcp_servers.esperia-voxkit]
+command = "uv"
+args = [
+    "--project",
+    "/Users/mosley/projects/Esperia/city/mcp",
+    "run",
+    "esperia-voxkit",
+]

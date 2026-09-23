@@ -1,0 +1,85 @@
+{
+  "name": "research-quality",
+  "version": "1-approved-rubric",
+  "status": "Owner approved rubric with accuracy imperative; held-out cases and full-run allowance not yet frozen/approved",
+  "authorized_backends": [
+    "ollama",
+    "codex"
+  ],
+  "api_fallback": false,
+  "development_cases": [
+    "energy-comparison",
+    "nonfinancial-research"
+  ],
+  "dimensions": [
+    "factual_and_numerical_accuracy",
+    "question_and_time_horizon",
+    "claim_support_and_attribution",
+    "comparison_and_reasoning",
+    "counterarguments",
+    "uncertainty_and_limits",
+    "useful_next_action"
+  ],
+  "held_out_proposal": {
+    "cases": 4,
+    "repetitions_per_backend": 2,
+    "max_calls_per_job": 12,
+    "maximum_model_calls": 192,
+    "budget_approved": false,
+    "rules": [
+      "Owner reviews cases and thresholds before freeze",
+      "Do not tune prompts/models on held-out results",
+      "Record revisions and create a new held-out version after tuning",
+      "Use identical questions and per-run caps; log retrieval differences",
+      "Human review final outputs independently of model self-review"
+    ]
+  },
+  "completion_requires": [
+    "Owner-approved frozen rubric and held-out cases",
+    "Authorized bounded run batch",
+    "Source/claim/numerical audits and blind human scoring",
+    "Published failures, resource use and coverage limitations",
+    "Owner acceptance or explicit failed gate"
+  ],
+  "owner_supplied_questions": [
+    {
+      "id": "cybersecurity-consumer-trust",
+      "question": "What factors in the cybersecurity space dictate consumer trust?",
+      "status": "received; expected decision, scope and scoring criteria to freeze before evaluation"
+    },
+    {
+      "id": "traditional-versus-modern",
+      "question": "How do traditional investing or trading strategies compare with modern ones?",
+      "status": "discipline confirmed by owner; representative strategy selection and scoring criteria to freeze",
+      "original_question": "How does traditional strategies compare to modern ones?"
+    }
+  ],
+  "owner_approval": {
+    "date": "2026-09-21",
+    "scope": "Quality rubric, with explicit accuracy requirement",
+    "note": "Rubric approval does not approve the proposed 192-call batch or accept any report."
+  },
+  "gates": {
+    "permission_violations": 0,
+    "budget_overruns": 0,
+    "fabricated_accepted_quotes": 0,
+    "material_unsupported_claims": 0,
+    "unsupported_or_unreproducible_material_numbers": 0,
+    "relevant_source_fraction_min": 0.9,
+    "human_score_min_each_dimension": 4,
+    "human_score_scale_max": 5,
+    "answerable_case_completion_fraction_min": 0.8,
+    "unknown_or_unanswerable_cases": "Explicitly blocked with specific gaps; never count as successful answers",
+    "material_factual_errors": 0,
+    "material_numerical_errors": 0,
+    "material_date_unit_entity_errors": 0,
+    "material_misattributions": 0,
+    "unresolved_material_contradictions_presented_as_fact": 0
+  },
+  "accuracy_policy": {
+    "hard_gate": "Any material accuracy error fails the case regardless of other scores.",
+    "verification": "Audit material claims against dated evidence and original context; check arithmetic, units, periods, denominators, entity attribution and whether causal language is justified. Citation/excerpt matching alone is insufficient.",
+    "uncertainty": "Do not fill unavailable facts with plausible assertions. Label estimates, forecasts and assumptions; distinguish lack of evidence from evidence of absence.",
+    "judgement": "Human audit is required; neither source existence nor model self-review proves accuracy."
+  }
+}

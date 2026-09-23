@@ -1,0 +1,45 @@
+{
+  "name": "Library",
+  "code": "U2",
+  "palette": {
+    "plinth": "#1a1d28",
+    "structure": "#3c4a47",
+    "gold": "#d8ad55",
+    "glass": "#ffb45c",
+    "neonA": "#ffb45c"
+  },
+  "parts": [
+    {
+      "type": "plinth",
+      "w": 13.4,
+      "d": 13.4,
+      "h": 1.2
+    },
+    {
+      "type": "slabs",
+      "y": 1.2,
+      "count": 4,
+      "pitch": 3.0,
+      "w": 12,
+      "h": 14,
+      "t": 1.4,
+      "slot": "structure",
+      "foot": "gold",
+      "glass": {
+        "slot": "glass",
+        "density": 0.75,
+        "cw": 1.5,
+        "ch": 2.2,
+        "from": 1
+      }
+    },
+    {
+      "type": "strip",
+      "y": 15.3,
+      "z": 5.1,
+      "axis": "x",
+      "len": 12,
+      "slot": "neonA"
+    }
+  ]
+}

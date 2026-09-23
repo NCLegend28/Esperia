@@ -1,0 +1,40 @@
+{
+  "name": "Evaluation Lab",
+  "code": "U8",
+  "palette": {
+    "plinth": "#1a1d28",
+    "structure": "#313a58",
+    "glass": "#eef2ff",
+    "neonA": "#3fd8f0"
+  },
+  "parts": [
+    {
+      "type": "plinth",
+      "w": 11,
+      "d": 13,
+      "h": 0.6
+    },
+    {
+      "type": "volume",
+      "y": 0.6,
+      "w": 9,
+      "d": 11,
+      "h": 24,
+      "slot": "structure",
+      "glass": {
+        "slot": "glass",
+        "density": 0.65
+      },
+      "edges": "neonA",
+      "corner": "neonA"
+    },
+    {
+      "type": "sign",
+      "side": "s",
+      "text": "EVAL LAB",
+      "y": 3,
+      "h": 2.4,
+      "slot": "neonA"
+    }
+  ]
+}

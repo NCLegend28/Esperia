@@ -21,4 +21,10 @@
 
 Everything in the right-hand data column already has a real source in the CLI; the generator is shaped like the ledger on purpose. Traffic, jobs and stats in this file are simulated — the header says so.
 
-Debug hook: `window.__esperia` exposes `selectBuilding`, `selectFloor`, `selectAgent`, `back`, `dispatch`, `buildings`, `agents`, `state()`.
+## Now with models and architects
+
+`kit/` holds the specs (the source of truth), `mcp/` builds them into `build/` and runs the architect population, and this page loads whatever `build/manifest.json` places. Serve the folder to see models: `python3 -m http.server 8090 --directory city`. See `mcp/README.md`.
+
+Emergent buildings get floors and desks once the owner assigns divisions (`assign_divisions` in the MCP, stored in the manifest); the page hires from a 24-agent reserve who then commute like everyone else.
+
+Debug hook: `window.__esperia` exposes `selectBuilding`, `selectFloor`, `selectAgent`, `back`, `dispatch`, `hireInto`, `buildings`, `agents`, `state()`.

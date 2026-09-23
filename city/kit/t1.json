@@ -1,0 +1,54 @@
+{
+  "name": "Quant Desk",
+  "code": "U7",
+  "palette": {
+    "plinth": "#1a1d28",
+    "structure": "#2a2f47",
+    "glass": "#eef2ff",
+    "neonA": "#ff5fd2"
+  },
+  "parts": [
+    {
+      "type": "plinth",
+      "w": 12,
+      "d": 12,
+      "h": 0.6
+    },
+    {
+      "type": "volume",
+      "y": 0.6,
+      "w": 10,
+      "d": 10,
+      "h": 22,
+      "slot": "structure",
+      "glass": {
+        "slot": "glass",
+        "density": 0.65
+      },
+      "edges": "neonA",
+      "corner": "neonA"
+    },
+    {
+      "type": "setback",
+      "w": 7,
+      "d": 7,
+      "h": 8,
+      "slot": "structure",
+      "glass": {
+        "slot": "glass",
+        "density": 0.6
+      },
+      "edges": "neonA"
+    },
+    {
+      "type": "antenna_array",
+      "y": 30.6,
+      "x": 0.5,
+      "count": 4,
+      "pitch": 1.2,
+      "h": 3,
+      "axis": "x",
+      "tip": "neonA"
+    }
+  ]
+}

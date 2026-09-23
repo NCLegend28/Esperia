@@ -154,3 +154,23 @@ Proposed evaluation design: financial outcomes lead the quant-team business scor
 Competing strategy teams, reputation and agents investing in a quant company are future ideas outside the first release. The owner confirmed an internal simulated economy: agents may eventually invest simulated currency in in-city quant companies. Define allocation, settlement and anti-gaming rules before implementation; simulated holdings confer no claim on real money or authority to spend it. Internal currency, reputation and actual money must have separate records; no automatic conversion or authority is implied.
 
 A future University can teach reusable methods through practice tasks and evaluated instruction changes. Preserve failed experiments and lessons in the Library. Competition and critique use independent evaluation; calling the workflow a GAN does not make it a model-training system.
+
+
+## 15. Universal Library graph — owner direction September 21, 2026
+
+F-24 The Library is one city-wide knowledge graph, with an Obsidian-like global view and focused local views. Disciplines, teams, subjects and projects are overlapping collections of the same nodes. Rooms/racks organize navigation; they do not isolate knowledge or duplicate shared documents. The first backend supports exact-label collections; hierarchical collection navigation is a later interface concern.
+
+F-25 Findings, hypotheses, questions, source documents, methods and other author-defined note kinds retain stable identity and append-only revisions. Relationships record their author, rationale, visibility and both compared revisions. Support and disagreement are explicit links, not automatic promotion to truth. Editing a note marks earlier revision-bound relationships stale until reconsidered.
+
+F-26 A global or filtered view must not expose restricted notes, relationship rationales, hidden endpoint identities or hidden collection membership. Initial graph commands are local owner operations with a narrowed public projection; authenticated agent grants and network API permissions remain separate acceptance work. Scope changes need an explicit publishing workflow, not an ordinary content edit.
+
+F-27 The Library supports text search, backlinks across collections, source provenance and historical note inspection. Graph pagination/truncation must be visible to clients. The full interactive graph, raw file/PDF viewing, semantic search and automatic suggested connections are not implied by delivery of the notebook data model.
+
+
+## 16. Owner research guide and accuracy — September 21, 2026
+
+F-28 Provide a question-framing assistant for the owner. It helps clarify purpose, audience, ambiguous terms, time horizon and meaningful comparisons, suggests subquestions, identifies assumptions/premises requiring verification, and proposes evidence and success criteria. It preserves owner intent and does not silently decide unanswered scope choices. It may ask up to three prioritized questions per response; later UI can present these conversationally.
+
+F-29 Question-preparation sessions belong to the owner's Library as versioned research briefs. The configured guide identity and note ID survive model changes. Each explicit owner message permits one bounded model call. Continuing a brief retains the original question, accumulated clarifications and initial time anchor; concurrent edits cannot overwrite one another. The current local CLI provides the first interaction surface; city UI and authenticated identity/grants remain pending.
+
+F-30 Accuracy is imperative. A material factual, numerical, date, unit or attribution error fails research acceptance irrespective of presentation quality. Exact citation matching alone is insufficient. Missing evidence, uncertainty, contradictions, forecasts and assumptions must be represented honestly. A prepared question is neither an accepted research result nor authority to dispatch a research team.

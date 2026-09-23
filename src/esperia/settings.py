@@ -75,6 +75,25 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     profile: Profile = Field(default_factory=Profile)
+    question_assistant_id: str = Field(
+        default="research-guide", min_length=1, max_length=200
+    )
+    question_turn_limit: int = Field(default=8, ge=1, le=16)
+    question_brief_tokens: int = Field(default=1800, ge=256, le=8000)
+    question_instructions: str = Field(
+        default=(
+            "Help the owner formulate an answerable research question. Preserve their intent and distinguish their constraints from suggested assumptions. "
+            "Clarify the decision, audience, key terms, comparison, geography and time horizon only when material. "
+            "Ask a small prioritized set of clarifying questions; do not invent answers on the owner's behalf. "
+            "Propose evidence requirements, counterevidence and falsifiable success criteria. Accuracy is mandatory: identify factual premises requiring verification. "
+            "This is question preparation, not research: do not assert empirical findings, invent sources, browse or execute research."
+        ),
+        min_length=1,
+        max_length=12000,
+    )
+    notebook_page_size: int = Field(default=100, ge=1, le=1000)
+    notebook_edge_limit: int = Field(default=1000, ge=1, le=10000)
+    notebook_input_bytes: int = Field(default=1000000, ge=1000, le=10000000)
     data_root: Path = Path(".local/dev")
     database: Path | None = None
     backend: Literal["codex", "llama", "hybrid", "ollama", "ollama-hybrid"] = "codex"

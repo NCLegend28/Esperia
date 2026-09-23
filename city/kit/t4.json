@@ -1,0 +1,32 @@
+{
+  "name": "Ops & Reliability",
+  "code": "U10",
+  "palette": {
+    "plinth": "#1a1d28",
+    "structure": "#262b40",
+    "glass": "#eef2ff",
+    "neonA": "#3fd8f0"
+  },
+  "parts": [
+    {
+      "type": "plinth",
+      "w": 12,
+      "d": 12,
+      "h": 0.6
+    },
+    {
+      "type": "volume",
+      "y": 0.6,
+      "w": 10,
+      "d": 10,
+      "h": 18,
+      "slot": "structure",
+      "glass": {
+        "slot": "glass",
+        "density": 0.65
+      },
+      "edges": "neonA",
+      "corner": "neonA"
+    }
+  ]
+}
